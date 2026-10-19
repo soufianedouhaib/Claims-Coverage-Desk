@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Sign in · Claims Coverage Desk</title>
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/styles.css?v=1">
+<link rel="stylesheet" href="/styles.css?v=2">
 </head>
 <body>
 <div class="signin-wrap">
@@ -22,9 +22,14 @@
       <button class="btn primary" type="submit" id="go">Sign in</button>
       <p class="small muted" style="margin:0">Accounts are created by your administrator. Ask them if you need access or a new password.</p>
     </form>
+    <section class="card card-pad demo-box" id="demo" hidden aria-labelledby="demoTitle">
+      <h2 id="demoTitle">Demo accounts</h2>
+      <p class="small muted" style="margin:4px 0 12px">Sign in with one click to try each role.</p>
+      <div class="demo-list" id="demoList"></div>
+    </section>
   </div>
 </div>
-<script src="/common.js?v=1"></script>
-<script src="/login.js?v=1"></script>
+<script src="/common.js?v=2"></script>
+<script src="/login.js?v=2"></script>
 </body>
 </html>

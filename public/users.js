@@ -26,12 +26,16 @@ AP.boot({
         var el = document.getElementById('list');
         el.innerHTML = '<div class="table-wrap"><table class="data cards"><thead><tr><th>Name</th><th>Role</th><th>Status</th><th>Last sign-in</th><th></th></tr></thead><tbody>' +
           j.users.map(function (u) {
-            return '<tr><td data-label="Name"><div class="primary-cell">' + E(u.name) + (u.email === me.email ? ' <span class="small muted">(you)</span>' : '') + '</div><div class="sub wrap-any">' + E(u.email) + '</div></td>' +
+            return '<tr><td data-label="Name"><div class="primary-cell">' + E(u.name) + (u.email === me.email ? ' <span class="small muted">(you)</span>' : '') + (u.demo ? ' <span class="pill plain info">Demo</span>' : '') + '</div><div class="sub wrap-any">' + E(u.email) + '</div></td>' +
               '<td data-label="Role">' + E(u.roleLabel) + '</td>' +
               '<td data-label="Status">' + (u.active ? '<span class="pill ok">Active</span>' : '<span class="pill">Deactivated</span>') + '</td>' +
               '<td data-label="Last sign-in" class="nowrap">' + (u.lastLoginAt ? AP.fmtRel(u.lastLoginAt) : '<span class="muted">Never</span>') + '</td>' +
-              '<td class="right"><button class="btn small" type="button" data-edit="' + E(u.email) + '">Edit</button></td></tr>';
+              '<td class="right nowrap"><button class="btn small" type="button" data-edit="' + E(u.email) + '">Edit</button>' +
+              (u.email === me.email ? '' : ' <button class="btn small danger" type="button" data-del="' + E(u.email) + '">Delete</button>') + '</td></tr>';
           }).join('') + '</tbody></table></div>';
+        el.querySelectorAll('[data-del]').forEach(function (b) {
+          b.onclick = function () { del(j.users.find(function (u) { return u.email === b.dataset.del; })); };
+        });
         el.querySelectorAll('[data-edit]').forEach(function (b) {
           b.onclick = function () { edit(j.users.find(function (u) { return u.email === b.dataset.edit; })); };
         });
@@ -58,7 +62,7 @@ AP.boot({
       AP.modal('Edit ' + u.name, '<div class="form-grid"><div class="small muted wrap-any">' + E(u.email) + '</div><label class="field">Name<input type="text" id="u-name" value="' + E(u.name) + '"></label>' +
         '<label class="field">Role' + roleSelect(u.role) + (self ? '<span class="hint">You cannot remove your own administrator role.</span>' : '') + '</label>' +
         '<label class="field">New password<span class="hint">Leave empty to keep the current one. Changing it signs them out.</span><input type="text" id="u-pw" autocomplete="off"></label>' +
-        (self ? '' : '<label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="u-active"' + (u.active ? ' checked' : '') + '> Active (can sign in)</label>') +
+        (self ? '<div class="small muted">You cannot delete or deactivate your own account.</div>' : '<label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="u-active"' + (u.active ? ' checked' : '') + '> Active (can sign in)</label>') +
         '<div class="alert bad" id="u-err" hidden></div></div>', [
         { label: 'Cancel' },
         { label: 'Save', primary: true, onClick: function (back, close) {
@@ -68,6 +72,18 @@ AP.boot({
           AP.api('PATCH', '/api/users/' + encodeURIComponent(u.email), b)
             .then(function () { close(); AP.toast('Saved'); load(); })
             .catch(function (e) { var err = back.querySelector('#u-err'); err.textContent = e.message; err.hidden = false; });
+          return false;
+        } }
+      ]);
+    }
+    function del(u) {
+      AP.modal('Delete ' + u.name + '?', '<p>This permanently removes <strong class="wrap-any">' + E(u.email) + '</strong>. They are signed out and can no longer sign in.' +
+        (u.demo ? ' This demo account also disappears from the sign-in page.' : '') + '</p><p class="small muted">Claims and reviews they worked on are kept. To block access but keep the account, use Edit and untick Active instead.</p>' +
+        '<div class="alert bad" id="d-err" hidden></div>', [
+        { label: 'Cancel' },
+        { label: 'Delete account', danger: true, onClick: function (back, close) {
+          AP.api('DELETE', '/api/users/' + encodeURIComponent(u.email)).then(function () { close(); AP.toast('Account deleted'); load(); })
+            .catch(function (e) { var x = back.querySelector('#d-err'); x.textContent = e.message; x.hidden = false; });
           return false;
         } }
       ]);
