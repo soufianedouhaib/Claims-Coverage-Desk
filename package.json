@@ -1,0 +1,15 @@
+{
+  "name": "claims-coverage-desk",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Claims coverage console: submit claims, follow the assessment, and complete handler reviews.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "express": "^4.21.2",
+    "ioredis": "^5.4.2"
+  }
+}
