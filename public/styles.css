@@ -279,3 +279,37 @@ details.more > .inner { padding: 0 20px 16px; }
 .spinner { width: 16px; height: 16px; border: 2px solid var(--border-strong); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; display: inline-block; vertical-align: -3px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .loading-page { padding: 60px 20px; text-align: center; color: var(--text-3); }
+
+/* ---------- test samples & review routes ---------- */
+.route-chip { display: inline-flex; align-items: center; gap: 6px; border-radius: 8px; padding: 3px 9px; font-size: 12px; white-space: nowrap; border: 1px solid transparent; }
+.route-chip.quick { background: var(--info-soft); color: var(--info); border-color: color-mix(in srgb, var(--info) 25%, transparent); }
+.route-chip.detailed { background: var(--violet-soft); color: var(--violet); border-color: color-mix(in srgb, var(--violet) 25%, transparent); }
+.route-chip .route-who { color: var(--text-2); }
+.route-chip .route-arrow { font-weight: 700; }
+.route-chip.big { display: flex; flex-wrap: wrap; white-space: normal; padding: 8px 10px; font-size: 13px; gap: 4px 8px; }
+.route-chip.big .route-label { font-size: 11px; text-transform: uppercase; letter-spacing: .4px; font-weight: 650; }
+.route-chip.big .route-who { flex-basis: 100%; padding-left: 18px; font-size: 12.5px; }
+.route-legend { display: flex; gap: 6px; flex-wrap: wrap; }
+.samples { margin-bottom: 18px; }
+.sample-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+@media (max-width: 1100px) { .sample-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 700px) { .sample-grid { grid-template-columns: minmax(0, 1fr); } .route-chip { white-space: normal; } }
+.sample-card { border: 1px solid var(--border); border-top: 4px solid var(--info); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 8px; background: var(--surface); min-width: 0; }
+.sample-card.route-detailed { border-top-color: var(--violet); }
+.sample-card.selected { box-shadow: 0 0 0 2px var(--accent); }
+.sample-card h3 { font-size: 15px; }
+.sample-top { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.sample-num { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--text-2); }
+.sample-facts { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; margin: 0; font-size: 13px; align-items: center; }
+.sample-facts dt { color: var(--text-3); font-size: 12px; }
+.sample-facts dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.sample-facts .pill, .expect .pill { white-space: normal; }
+.sample-why { color: var(--text-2); margin: 0; }
+.sample-more summary { cursor: pointer; font-size: 12.5px; font-weight: 600; color: var(--accent); }
+.sample-more ul { margin-top: 6px; }
+.sample-actions { display: flex; gap: 8px; margin-top: auto; padding-top: 4px; flex-wrap: wrap; }
+.sample-badge { background: var(--surface-2); border-radius: 8px; padding: 8px 10px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.expect { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
+.expect .match { font-weight: 650; }
+.expect .match.ok { color: var(--ok); }
+.expect .match.bad { color: var(--warn); }

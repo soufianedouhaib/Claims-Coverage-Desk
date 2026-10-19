@@ -51,6 +51,16 @@ AP.boot({
       if (AP.qs('new') === '1' && (c.status === 'processing' || c.status === 'queued')) {
         left.push('<div class="alert ok">Claim submitted. The assessment usually takes a few minutes; this page updates by itself.</div>');
       }
+      // Test sample: show what should happen and whether it did.
+      var smp = c.sampleId && SAMPLES ? SAMPLES.find(function (x) { return x.id === c.sampleId; }) : null;
+      if (smp) {
+        var routeNow = c.reviewKind || null;
+        var routeTxt = routeNow ? (routeNow === smp.route ? '<span class="match ok">✓ Went to the expected review</span>' : '<span class="match bad">≠ Went to ' + E(AP.ROUTES[routeNow].label) + ' instead</span>') : '<span class="muted small">Review not reached yet</span>';
+        left.push('<section class="card card-pad"><div class="sample-num" style="margin-bottom:4px">Test sample ' + smp.number + '</div>' +
+          '<div class="expect"><div><div class="small muted">Expected decision</div>' + AP.decisionPill(smp.expectedDecision) + '</div>' +
+          '<div><div class="small muted">Expected review</div>' + AP.routeChip(smp.route) + '</div><div>' + routeTxt + '</div></div>' +
+          '<p class="small muted" style="margin:10px 0 0">' + E(smp.why) + '</p></section>');
+      }
       if (c.error && ['failed', 'cancelled', 'timed_out'].indexOf(c.status) >= 0) left.push('<div class="alert bad">' + E(c.error) + '</div>');
 
       // Review banner
@@ -192,8 +202,13 @@ AP.boot({
 
     function confWidth(v) { if (v == null || isNaN(Number(v))) return 0; v = Number(v); if (v <= 1) v *= 100; return Math.max(0, Math.min(100, Math.round(v))); }
 
+    var SAMPLES = null;
     function load(force) {
       clearTimeout(timer);
+      if (SAMPLES === null) {
+        SAMPLES = [];
+        return fetch('/samples/samples.json').then(function (r) { return r.json(); }).then(function (j) { SAMPLES = j.samples || []; }).catch(function () {}).then(function () { load(force); });
+      }
       AP.api('GET', '/api/claims/' + encodeURIComponent(id) + (force ? '?refresh=1' : '')).then(function (d) {
         var j = JSON.stringify(d);
         if (j !== lastJson) { var y = window.scrollY; render(d); window.scrollTo(0, y); lastJson = j; }

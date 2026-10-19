@@ -267,7 +267,19 @@
 
   function qs(name) { return new URLSearchParams(location.search).get(name); }
 
+  // Which review a claim goes to, and who completes it.
+  var ROUTES = {
+    quick:    { label: 'Quick sign-off', who: 'Claims Handler' },
+    detailed: { label: 'Detailed review', who: 'Senior Claims Handler' }
+  };
+  function routeChip(kind, big) {
+    var r = ROUTES[kind]; if (!r) return '';
+    return '<span class="route-chip ' + kind + (big ? ' big' : '') + '"><span class="route-arrow" aria-hidden="true">→</span>' +
+      (big ? '<span class="route-label">Goes to</span>' : '') + '<strong>' + r.label + '</strong><span class="route-who">' + r.who + '</span></span>';
+  }
+
   window.AP = {
+    routeChip: routeChip, ROUTES: ROUTES,
     APP_NAME: APP_NAME, esc: esc, api: api, boot: boot, qs: qs, can: can,
     fmtDate: fmtDate, fmtRel: fmtRel, fmtNum: fmtNum, fmtPct: fmtPct, humanize: humanize,
     casePill: casePill, statusLabel: statusLabel, decisionPill: decisionPill, decisionText: decisionText, decisionClass: decisionClass,

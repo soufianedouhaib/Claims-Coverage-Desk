@@ -37,7 +37,7 @@ AP.boot({
           }
           if (r.error && ['failed', 'cancelled', 'timed_out'].indexOf(r.status) >= 0) prog = '<div class="sub">' + E(r.error) + '</div>';
           return '<tr class="click" data-id="' + E(r.id) + '">' +
-            '<td data-label="Claim"><div class="primary-cell">' + E(r.claimReference || 'Reference pending') + '</div><div class="sub">' + E([r.insuredName, r.title].filter(Boolean).join(' · ')) + '</div></td>' +
+            '<td data-label="Claim"><div class="primary-cell">' + E(r.claimReference || 'Reference pending') + (r.sampleId ? ' <span class="pill plain">Test sample</span>' : '') + '</div><div class="sub">' + E([r.insuredName, r.title].filter(Boolean).join(' · ')) + '</div></td>' +
             '<td data-label="Policy">' + (r.policyNumber ? '<span class="id">' + E(r.policyNumber) + '</span>' : '<span class="muted">—</span>') + '</td>' +
             '<td data-label="Status">' + AP.casePill(r) + prog + '</td>' +
             '<td data-label="Coverage decision">' + AP.decisionPill(r.decision, r.decision ? r.decisionConfirmed : undefined) + '</td>' +

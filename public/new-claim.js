@@ -14,6 +14,10 @@ AP.boot({
     main.innerHTML =
       '<div class="page-head"><div><div class="crumb"><a href="/claims.html">Claims</a> / New</div><h1>Submit a claim for coverage assessment</h1>' +
       '<div class="sub">Add the three documents. The assessment reads them, checks the policy, interprets the wording and proposes a coverage position for a handler to confirm.</div></div></div>' +
+      '<section class="card samples" id="samples" aria-labelledby="samplesTitle"><div class="card-head"><div><h2 id="samplesTitle">Test samples</h2>' +
+      '<div class="small muted">Complete claim packs with known answers. One click uploads all the documents and starts the assessment.</div></div>' +
+      '<div class="route-legend">' + AP.routeChip('quick') + AP.routeChip('detailed') + '</div></div>' +
+      '<div class="card-body"><div class="sample-grid" id="sampleGrid"><div class="muted small">Loading samples…</div></div></div></section>' +
       '<form id="f" class="split" novalidate>' +
       '<div class="stack">' +
       '<div class="card card-pad form-grid"><h2>Documents</h2>' +
@@ -31,6 +35,7 @@ AP.boot({
       '<div class="card card-pad form-grid"><h2>Details</h2>' +
       '<label class="field">Title<span class="hint">How this claim appears in the list until the claim reference is read. Optional.</span><input type="text" id="title" maxlength="120" placeholder="e.g. Burst pipe, kitchen"></label>' +
       '<label class="field">Notes for the handler<span class="hint">Optional</span><textarea id="notes" maxlength="2000"></textarea></label>' +
+      '<div class="sample-badge small" id="sampleBadge" hidden></div>' +
       '<div class="alert bad" id="err" role="alert" hidden></div>' +
       '<div id="prog" hidden><div class="small" id="progText">Uploading…</div><div class="bar" style="margin-top:6px"><span id="progBar" style="width:0%"></span></div></div>' +
       '<button class="btn primary" type="submit" id="go">Start assessment</button>' +
@@ -40,8 +45,10 @@ AP.boot({
     var err = document.getElementById('err');
     function showErr(m) { err.textContent = m; err.hidden = !m; }
 
-    function setFile(slot, files) {
+    var currentSample = null;
+    function setFile(slot, files, keepSample) {
       showErr('');
+      if (!keepSample) { currentSample = null; markSample(); }
       var list = Array.prototype.slice.call(files || []);
       var bad = list.filter(function (f) { return f.size > MAX; });
       if (bad.length) showErr(bad.map(function (f) { return f.name; }).join(', ') + ' is larger than 10 MB.');
@@ -60,7 +67,7 @@ AP.boot({
       ul.innerHTML = picked.evidence.map(function (f, i) {
         return '<li><span class="n">' + E(f.name) + '</span><span class="small muted">' + size(f.size) + '</span><button type="button" data-rm="' + i + '" aria-label="Remove ' + E(f.name) + '">Remove</button></li>';
       }).join('');
-      ul.querySelectorAll('[data-rm]').forEach(function (b) { b.onclick = function () { picked.evidence.splice(Number(b.dataset.rm), 1); renderEvidence(); }; });
+      ul.querySelectorAll('[data-rm]').forEach(function (b) { b.onclick = function () { picked.evidence.splice(Number(b.dataset.rm), 1); currentSample = null; markSample(); renderEvidence(); }; });
     }
 
     main.querySelectorAll('input[type=file]').forEach(function (inp) {
@@ -108,13 +115,79 @@ AP.boot({
       });
       chain.then(function () {
         pt.textContent = 'Starting the assessment…'; pb.style.width = '92%';
-        return AP.api('POST', '/api/claims', { title: document.getElementById('title').value, notes: document.getElementById('notes').value, files: out });
+        return AP.api('POST', '/api/claims', { title: document.getElementById('title').value, notes: document.getElementById('notes').value, files: out, sampleId: currentSample ? currentSample.id : null });
       }).then(function (j) {
         pb.style.width = '100%';
         location.href = '/claim.html?id=' + encodeURIComponent(j.claim.id) + '&new=1';
       }).catch(function (e2) {
         showErr(e2.message); go.disabled = false; prog.hidden = true;
+        document.querySelectorAll('#sampleGrid button').forEach(function (x) { x.disabled = false; if (x.dataset.run) x.textContent = 'Run sample'; });
       });
     });
+
+    // ---------- test samples ----------
+    var samples = [];
+    function markSample() {
+      document.querySelectorAll('.sample-card').forEach(function (c) { c.classList.toggle('selected', !!currentSample && c.dataset.id === currentSample.id); });
+      var badge = document.getElementById('sampleBadge');
+      if (badge) { badge.hidden = !currentSample; if (currentSample) badge.innerHTML = 'Using <strong>Sample ' + currentSample.number + ': ' + E(currentSample.title) + '</strong> ' + AP.routeChip(currentSample.route); }
+    }
+    function fetchFile(s, name) {
+      return fetch('/samples/' + s.id + '/' + encodeURIComponent(name)).then(function (r) {
+        if (!r.ok) throw new Error('Could not load the sample file ' + name + '.');
+        return r.blob();
+      }).then(function (b) { return new File([b], name, { type: 'application/pdf' }); });
+    }
+    function loadSample(s) {
+      var names = [s.files.fnol, s.files.schedule, s.files.wording].concat(s.files.evidence);
+      return Promise.all(names.map(function (n) { return fetchFile(s, n); })).then(function (fs) {
+        picked.evidence = [];
+        setFile('fnol', [fs[0]], true); setFile('schedule', [fs[1]], true); setFile('wording', [fs[2]], true);
+        setFile('evidence', fs.slice(3), true);
+        document.getElementById('title').value = 'Sample ' + s.number + ': ' + s.title;
+        currentSample = s; markSample();
+      });
+    }
+    function sampleCard(s) {
+      var base = '/samples/' + s.id + '/';
+      var files = [['Claim notification', s.files.fnol], ['Policy schedule', s.files.schedule], ['Policy wording', s.files.wording]]
+        .concat(s.files.evidence.map(function (n) { return ['Evidence', n]; }));
+      return '<article class="sample-card route-' + s.route + '" data-id="' + E(s.id) + '">' +
+        '<div class="sample-top"><span class="sample-num">Sample ' + s.number + '</span><span class="small muted">' + E(s.claimReference) + '</span></div>' +
+        '<h3>' + E(s.title) + '</h3><div class="small muted">' + E(s.place) + ' · ' + E(s.peril) + '</div>' +
+        '<div class="sample-route">' + AP.routeChip(s.route, true) + '</div>' +
+        '<dl class="sample-facts"><dt>Expected</dt><dd>' + AP.decisionPill(s.expectedDecision) + '</dd><dt>Claimed</dt><dd>' + E(s.claimed) + '</dd><dt>Outcome</dt><dd>' + E(s.expectedSettlement) + '</dd></dl>' +
+        '<p class="small sample-why">' + E(s.why) + '</p>' +
+        '<details class="sample-more"><summary>What the assessment should find</summary><ul class="plain small">' + s.checks.map(function (c) { return '<li>' + E(c) + '</li>'; }).join('') + '</ul>' +
+        '<div class="small muted" style="margin:8px 0 4px">Documents (' + files.length + ')</div><ul class="plain small">' +
+        files.map(function (f) { return '<li><a href="' + base + encodeURIComponent(f[1]) + '" target="_blank" rel="noopener">' + E(f[0]) + '</a> <span class="muted wrap-any">' + E(f[1]) + '</span></li>'; }).join('') + '</ul></details>' +
+        '<div class="sample-actions"><button type="button" class="btn primary small" data-run="' + E(s.id) + '">Run sample</button><button type="button" class="btn small" data-fill="' + E(s.id) + '">Fill the form</button></div>' +
+        '</article>';
+    }
+    fetch('/samples/samples.json', { cache: 'no-cache' }).then(function (r) { return r.json(); }).then(function (j) {
+      samples = j.samples || [];
+      var grid = document.getElementById('sampleGrid');
+      grid.innerHTML = samples.map(sampleCard).join('');
+      function find(id) { return samples.find(function (x) { return x.id === id; }); }
+      grid.querySelectorAll('[data-fill]').forEach(function (b) {
+        b.onclick = function () {
+          b.disabled = true;
+          loadSample(find(b.dataset.fill)).then(function () { AP.toast('Sample loaded. Check the documents, then start the assessment.'); document.getElementById('f').scrollIntoView({ behavior: 'smooth' }); })
+            .catch(function (e) { showErr(e.message); }).finally(function () { b.disabled = false; });
+        };
+      });
+      grid.querySelectorAll('[data-run]').forEach(function (b) {
+        b.onclick = function () {
+          grid.querySelectorAll('button').forEach(function (x) { x.disabled = true; });
+          b.textContent = 'Starting…';
+          loadSample(find(b.dataset.run)).then(function () {
+            document.getElementById('prog').scrollIntoView({ behavior: 'smooth', block: 'center' });
+            document.getElementById('f').requestSubmit();
+          }).catch(function (e) {
+            showErr(e.message); grid.querySelectorAll('button').forEach(function (x) { x.disabled = false; }); b.textContent = 'Run sample';
+          });
+        };
+      });
+    }).catch(function () { document.getElementById('samples').hidden = true; });
   }
 });
