@@ -177,7 +177,8 @@ function toRow(c, review) {
     reviewStatus: review ? review.status : null,
     progress: c.progress ? { executed: c.progress.executed || 0, total: c.progress.total || STEPS.length, running: c.progress.runningLabel || null } : null,
     error: c.error || null,
-    completedAt: c.completedAt || null
+    completedAt: c.completedAt || null,
+    sampleId: c.sampleId || null
   };
 }
 
@@ -186,7 +187,7 @@ async function reviewForClaim(c) {
   return getReview(c.reviewId);
 }
 
-function stepsFor(c, data) {
+function stepsFor(c, data, review) {
   const nodes = (data && data.nodes) || {};
   const byKey = {};
   Object.keys(nodes).forEach(function (k) { byKey[nodeKey(k)] = nodes[k]; });
@@ -202,7 +203,18 @@ function stepsFor(c, data) {
     let st = hit ? String(hit.status || '').toUpperCase() : '';
     let state = st === 'COMPLETED' ? 'done' : st === 'FAILED' ? 'failed' : st === 'WAITING' ? 'waiting' : st === 'STARTED' || st === 'RUNNING' || st === 'IN_PROGRESS' ? 'running' : st ? 'running' : 'todo';
     if (c.engineStatus === 'COMPLETED' && state !== 'failed') state = 'done';
-    return { label: label, state: state, ms: hit && hit.ms || null };
+    return { label: label, state: state, ms: hit && hit.ms || null, review: !!s.review };
+  }).map(function (s, i, all) {
+    // A review has arrived: everything before it has finished, even if the progress log lags behind.
+    const ri = all.findIndex(function (x) { return x.review; });
+    if (review && (review.status === 'pending' || review.status === 'submitting')) {
+      if (i < ri && s.state !== 'failed') s.state = 'done';
+      if (i === ri) { s.state = 'waiting'; s.label = REVIEW_KIND[review.kind].label; }
+    } else if (review && review.status === 'completed' && i <= ri && s.state !== 'failed') {
+      s.state = 'done'; if (i === ri) s.label = REVIEW_KIND[review.kind].label;
+    }
+    delete s.review;
+    return s;
   });
 }
 
@@ -568,6 +580,7 @@ app.post('/api/claims', json, auth.requireAuth('submit'), wrap(async function (r
   if (missing.length) return res.status(400).json({ error: 'Please add the ' + missing.join(', ') + '.' });
   const title = String(b.title || '').trim().slice(0, 120) || ('Claim submitted ' + new Date().toISOString().slice(0, 10));
   const notes = String(b.notes || '').trim().slice(0, 2000);
+  const sampleId = /^[a-z0-9-]{1,40}$/.test(String(b.sampleId || '')) ? String(b.sampleId) : null;
 
   const caseId = await engine.createCase(WORKFLOW_ID, title, notes || ('Submitted by ' + u.name));
   const payload = {};
@@ -579,7 +592,7 @@ app.post('/api/claims', json, auth.requireAuth('submit'), wrap(async function (r
   const claim = {
     id: caseId, caseId: caseId, title: title, notes: notes,
     createdBy: u.email, createdByName: u.name, createdAt: nowIso(),
-    engineStatus: 'PENDING', files: files
+    engineStatus: 'PENDING', files: files, sampleId: sampleId
   };
   await saveClaim(claim);
   await store.listPush('claims', caseId);
@@ -648,7 +661,7 @@ app.get('/api/claims/:id', auth.requireAuth('view'), wrap(async function (req, r
       wording: c.files.wording ? { name: c.files.wording.name } : null,
       evidence: (c.files.evidence || []).map(function (e) { return { name: e.name }; })
     },
-    steps: stepsFor(c, data),
+    steps: stepsFor(c, data, review),
     outputs: nodes,
     results: data.results || null,
     review: review ? Object.assign(reviewRow(review, c), { canAct: auth.can(u, REVIEW_KIND[review.kind].perm) }) : null
