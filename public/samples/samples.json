@@ -1,1 +1,82 @@
-
+{
+  "samples": [
+    {
+      "id": "burst-hose",
+      "number": 1,
+      "title": "Burst flexi hose",
+      "place": "Carindale QLD",
+      "peril": "Escape of liquid",
+      "claimReference": "CLM-2026-0457813",
+      "policyNumber": "HCP-QLD-2026-118742",
+      "insured": "Daniel & Priya Morrison",
+      "claimed": "$9,180",
+      "expectedDecision": "Covered",
+      "expectedSettlement": "$8,680 after $500 excess",
+      "route": "quick",
+      "why": "Clear covered claim: sudden burst hose, policy in force and paid, under $20k, no emergency, vulnerability or catastrophe flags, high confidence.",
+      "checks": [
+        "Escape of liquid (B5 / C3); plumber confirms no prior leak, so the gradual-damage exclusion D1 does not apply",
+        "Hose itself not covered, but it was not claimed",
+        "Quote $8,090 + drying $1,090 = $9,180 claimed, which matches"
+      ],
+      "files": {
+        "fnol": "01_FNOL_Claim_Notification_CLM-2026-0457813.pdf",
+        "schedule": "02_Policy_Schedule_HCP-QLD-2026-118742.pdf",
+        "wording": "03_Policy_Wording_PDS.pdf",
+        "evidence": ["04_Evidence_Plumber_Invoice_INV-30981.pdf", "05_Evidence_Repair_Quote_Q-2210.pdf", "06_Evidence_Drying_Report_DR-7781.pdf"]
+      }
+    },
+    {
+      "id": "flood-declined",
+      "number": 2,
+      "title": "Creek flood, flood cover removed",
+      "place": "North Lismore NSW",
+      "peril": "Flood (reported as storm)",
+      "claimReference": "CLM-2026-0461290",
+      "policyNumber": "HCP-NSW-2026-204519",
+      "insured": "Thomas Keller",
+      "claimed": "$16,450",
+      "expectedDecision": "Not covered",
+      "expectedSettlement": "$0 payable",
+      "route": "detailed",
+      "why": "Decline: the assessor shows creek overflow (Flood, B3), not storm, and endorsement E07 removes flood cover. The customer is displaced and a regional event is flagged, so a senior handler confirms the decline with written reasons (G4).",
+      "checks": [
+        "Customer describes it as \"storm and water damage\"",
+        "Water came from Leycester Creek at ground level; no roof or storm damage",
+        "Endorsement E07 removes Flood cover (C9) and triggers exclusion D2"
+      ],
+      "files": {
+        "fnol": "01_FNOL_Claim_Notification_CLM-2026-0461290.pdf",
+        "schedule": "02_Policy_Schedule_HCP-NSW-2026-204519.pdf",
+        "wording": "03_Policy_Wording_PDS.pdf",
+        "evidence": ["04_Evidence_Loss_Assessor_Report_NRLA-5521.pdf", "05_Evidence_Restoration_Quote_CR-1187.pdf"]
+      }
+    },
+    {
+      "id": "theft-high-value",
+      "number": 3,
+      "title": "Apartment theft, high value",
+      "place": "Pyrmont NSW",
+      "peril": "Theft (no forced entry)",
+      "claimReference": "CLM-2026-0463507",
+      "policyNumber": "HCP-NSW-2026-311260",
+      "insured": "Sophie Tran",
+      "claimed": "$28,199",
+      "expectedDecision": "Partially covered / more information required",
+      "expectedSettlement": "Up to $23,198 if everything is accepted",
+      "route": "detailed",
+      "why": "Over the $20k high-value threshold, with handler judgement needed: possibly unlocked balcony door (E12), no forced entry, late notification, and items over sub-limits without proof of ownership.",
+      "checks": [
+        "Police report within 24h (C4(ii)) likely met, but the event number needs verifying",
+        "Necklace and watch capped at $3,000 each (E1), no proof of ownership (F4); cash capped at $500 (E3)",
+        "Outstanding: police confirmation, proof of ownership, strata CCTV, how entry was gained"
+      ],
+      "files": {
+        "fnol": "01_FNOL_Claim_Notification_CLM-2026-0463507.pdf",
+        "schedule": "02_Policy_Schedule_HCP-NSW-2026-311260.pdf",
+        "wording": "03_Policy_Wording_PDS.pdf",
+        "evidence": ["04_Evidence_Electronics_Receipts_HE-2025.pdf", "05_Evidence_Jewellery_Valuation_V-4471.pdf"]
+      }
+    }
+  ]
+}
