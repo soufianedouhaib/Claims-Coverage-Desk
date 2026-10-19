@@ -51,7 +51,7 @@ function missingEnv() {
   if (!auth.hasSessionSecret()) m.push('SESSION_SECRET');
   if (!process.env.REVIEW_WEBHOOK_SECRET) m.push('REVIEW_WEBHOOK_SECRET');
   if (!store.persistent()) m.push('Redis storage (connect an Upstash Redis store)');
-  if (!process.env.ADMIN_EMAIL || !process.env.ADMIN_PASSWORD) m.push('ADMIN_EMAIL / ADMIN_PASSWORD (first sign-in)');
+  if (!auth.demoEnabled() && (!process.env.ADMIN_EMAIL || !process.env.ADMIN_PASSWORD)) m.push('ADMIN_EMAIL / ADMIN_PASSWORD (first sign-in)');
   return m;
 }
 
@@ -419,6 +419,31 @@ app.post('/api/auth/login', json, wrap(async function (req, res) {
   res.json({ ok: true, user: auth.publicUser(u) });
 }));
 
+const ROLE_BLURB = {
+  admin: 'Everything, including users and set-up',
+  intake: 'Submits claims and follows their progress',
+  handler: 'Completes quick sign-offs',
+  senior: 'Completes detailed reviews and quick sign-offs'
+};
+// Public: the demo accounts shown on the sign-in page.
+app.get('/api/auth/demo-accounts', wrap(async function (req, res) {
+  const list = await auth.listDemoAccounts();
+  res.json({ enabled: auth.demoEnabled(), accounts: list.map(function (u) {
+    return { email: u.email, name: u.name, role: u.role, roleLabel: (auth.ROLES[u.role] || {}).label || u.role, blurb: ROLE_BLURB[u.role] || '' };
+  }) });
+}));
+
+app.post('/api/auth/demo', json, wrap(async function (req, res) {
+  if (!auth.demoEnabled()) return res.status(404).json({ error: 'Demo accounts are switched off.' });
+  await auth.ensureDemoAccounts();
+  const u = await auth.getUser(req.body && req.body.email);
+  if (!u || !u.demo || u.active === false) return res.status(404).json({ error: 'That demo account is not available.' });
+  u.lastLoginAt = nowIso();
+  await auth.saveUser(u);
+  auth.setSession(res, u, originOf(req).startsWith('https'));
+  res.json({ ok: true, user: auth.publicUser(u) });
+}));
+
 app.post('/api/auth/logout', function (req, res) { auth.clearSession(res); res.json({ ok: true }); });
 
 app.get('/api/me', wrap(async function (req, res) {
@@ -484,6 +509,15 @@ app.patch('/api/users/:email', json, auth.requireAuth('users'), wrap(async funct
   }
   await auth.saveUser(u);
   res.json({ user: auth.publicUser(u) });
+}));
+
+app.delete('/api/users/:email', auth.requireAuth('users'), wrap(async function (req, res) {
+  const me = await auth.currentUser(req);
+  const u = await auth.getUser(req.params.email);
+  if (!u) return res.status(404).json({ error: 'User not found.' });
+  if (u.email === me.email) return res.status(400).json({ error: 'You cannot delete your own account.' });
+  await auth.deleteUser(u.email);
+  res.json({ ok: true });
 }));
 
 // ---------------------------------------------------------------------------
