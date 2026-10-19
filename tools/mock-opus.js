@@ -81,7 +81,7 @@ function createMock(opts) {
 
   async function run(c) {
     const t = c.title.toLowerCase();
-    const complex = /complex/.test(t), fail = /fail/.test(t);
+    const complex = /complex|flood|theft/.test(t), fail = /fail/.test(t);
     const ref = 'CLM-' + (2026000 + Math.floor(Math.random() * 9000));
     const D = data(ref, complex);
     async function step(name, out) {
