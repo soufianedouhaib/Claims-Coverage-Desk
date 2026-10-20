@@ -870,7 +870,12 @@ app.get('/api/reports', auth.requireAuth('reports'), wrap(async function (req, r
   const done = reviews.filter(function (r) { return r.status === 'completed'; });
   const changed = done.filter(function (r) { const a = r.submitted && r.submitted.handler_review_audit || r.submitted && r.submitted.quick_signoff_audit; return Array.isArray(a) && a[0] && a[0].decision_changed; });
   const outcomes = {};
-  done.forEach(function (r) { const o = (r.submitted && r.submitted[REVIEW_KIND[r.kind].outcomeVar]) || 'Unknown'; outcomes[o] = (outcomes[o] || 0) + 1; });
+  done.forEach(function (r) {
+    let o = r.submitted && r.submitted[REVIEW_KIND[r.kind].outcomeVar];
+    if (!o) { const raw = r.submittedRaw || r.submitted || {}; const k = Object.keys(raw).find(function (x) { return /outcome/i.test(x) && typeof raw[x] === 'string'; }); o = k && raw[k]; }
+    o = o || 'Not recorded';
+    outcomes[o] = (outcomes[o] || 0) + 1;
+  });
   res.json({
     days: days,
     scope: auth.can(u, 'view_all') ? 'all' : u.role === 'intake' ? 'mine' : u.role === 'handler' ? 'quick' : 'detailed',
