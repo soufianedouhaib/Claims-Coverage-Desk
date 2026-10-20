@@ -164,11 +164,14 @@ function deriveStatus(c, review) {
   return 'processing';
 }
 
+// Older sample runs were titled "Sample 2: Creek flood, ..."; show the case name only.
+function cleanTitle(t) { return String(t || '').replace(/^\s*(test\s+)?sample\s*\d+\s*[:\-\u2013]\s*/i, '') || null; }
+
 function toRow(c, review) {
   const decision = c.confirmedDecision || c.coverageDecision || null;
   return {
     id: c.id,
-    title: c.title,
+    title: cleanTitle(c.title),
     claimReference: c.claimReference || null,
     insuredName: c.insuredName || null,
     policyNumber: c.policyNumber || null,
@@ -415,6 +418,10 @@ async function linkOrphanReviews(c) {
   }
 }
 
+// One set of words on screen for both review types (the workflow still receives its own value).
+const OUTCOME_LABEL = { 'Non-binding override': 'Overridden', 'Clarification requested': 'Returned for clarification', 'Returned for further review': 'Returned for clarification' };
+function outcomeLabel(o) { return o ? (OUTCOME_LABEL[o] || o) : o; }
+
 function reviewRow(r, c) {
   const inp = r.inputs || {};
   const rv = r.reviewedOutputs || {};
@@ -424,7 +431,7 @@ function reviewRow(r, c) {
     kindLabel: REVIEW_KIND[r.kind].label,
     status: r.status,
     claimId: r.claimId || null,
-    claimTitle: c ? c.title : null,
+    claimTitle: c ? cleanTitle(c.title) : null,
     claimReference: r.claimReference || (c && c.claimReference) || null,
     insuredName: (c && c.insuredName) || null,
     proposedDecision: pickFirst(inp, ['coverage_decision']) || pickFirst(rv, ['coverage_decision']),
@@ -432,7 +439,7 @@ function reviewRow(r, c) {
     receivedAt: r.receivedAt,
     completedAt: r.completedAt || null,
     completedByName: r.completedByName || null,
-    outcome: r.submitted ? r.submitted[REVIEW_KIND[r.kind].outcomeVar] || null : null,
+    outcome: r.submitted ? outcomeLabel(r.submitted[REVIEW_KIND[r.kind].outcomeVar]) || null : null,
     confirmedDecision: r.submitted ? r.submitted.confirmed_coverage_decision || null : null,
     notes: r.submitted ? r.submitted.handler_notes || null : null,
     overrideReason: r.submitted ? r.submitted.handler_override_reason || null : null,
@@ -567,6 +574,19 @@ function canSeeClaim(u, c, review) {
 async function visibleRows(u, claims) {
   const rows = [];
   for (const c of claims) { const r = await reviewForClaim(c); if (canSeeClaim(u, c, r)) rows.push(toRow(c, r)); }
+  markRepeats(rows);
+  return rows;
+}
+// The same claim reference submitted more than once (e.g. a sample run again). Each run is assessed
+// on its own, so outcomes can differ; label the repeats so this reads as deliberate.
+function markRepeats(rows) {
+  const by = {};
+  rows.forEach(function (r) { if (r.claimReference) (by[r.claimReference] = by[r.claimReference] || []).push(r); });
+  Object.keys(by).forEach(function (k) {
+    const g = by[k]; if (g.length < 2) return;
+    g.sort(function (a, b) { return String(a.createdAt).localeCompare(String(b.createdAt)); });
+    g.forEach(function (r, i) { r.repeat = { run: i + 1, of: g.length, firstId: g[0].id, firstAt: g[0].createdAt }; });
+  });
   return rows;
 }
 
@@ -762,8 +782,20 @@ app.get('/api/claims/:id', auth.requireAuth('view'), wrap(async function (req, r
   const review = await reviewForClaim(c);
   const nodes = {};
   Object.keys(data.nodes || {}).forEach(function (k) { nodes[k] = data.nodes[k].outputs || {}; });
+  // Other runs with the same claim reference, so a repeat reads as deliberate.
+  const runs = [];
+  if (c.claimReference) {
+    for (const o of await allClaims()) {
+      if (o.claimReference !== c.claimReference) continue;
+      const orv = o.id === c.id ? review : await reviewForClaim(o);
+      if (o.id === c.id || canSeeClaim(u, o, orv)) runs.push(toRow(o, orv));
+    }
+    markRepeats(runs);
+  }
+  const self = runs.find(function (x) { return x.id === c.id; });
   res.json({
-    claim: toRow(c, review),
+    claim: Object.assign(toRow(c, review), self && self.repeat ? { repeat: self.repeat } : {}),
+    otherRuns: runs.filter(function (x) { return x.id !== c.id; }).map(function (x) { return { id: x.id, createdAt: x.createdAt, status: x.status, decision: x.decision, decisionConfirmed: x.decisionConfirmed, reviewKind: x.reviewKind, run: x.repeat && x.repeat.run }; }),
     notes: c.notes || '',
     files: {
       fnol: c.files.fnol ? { name: c.files.fnol.name } : null,
@@ -864,6 +896,12 @@ app.get('/api/dashboard', auth.requireAuth('view'), wrap(async function (req, re
       quick: auth.can(u, 'review_quick') ? reviews.filter(function (r) { return r.kind === 'quick'; }).length : null,
       detailed: auth.can(u, 'review_detailed') ? reviews.filter(function (r) { return r.kind === 'detailed'; }).length : null
     },
+    // The oldest review waiting for this person, for the "Review next" button and the banner.
+    next: (function () {
+      const mine = reviews.filter(function (r) { return auth.can(u, REVIEW_KIND[r.kind].perm); })
+        .sort(function (a, b) { return String(a.receivedAt).localeCompare(String(b.receivedAt)); });
+      return mine.length ? { id: mine[0].id, kind: mine[0].kind, receivedAt: mine[0].receivedAt, count: mine.length } : null;
+    })(),
     recent: rows.slice(0, 8)
   });
 }));
@@ -904,12 +942,13 @@ app.get('/api/reports', auth.requireAuth('reports'), wrap(async function (req, r
   const mins = function (a, b) { const x = (Date.parse(b) - Date.parse(a)) / 60000; return isFinite(x) && x >= 0 ? x : null; };
   const avg = function (xs) { xs = xs.filter(function (x) { return x != null; }); return xs.length ? xs.reduce(function (s, x) { return s + x; }, 0) / xs.length : null; };
   const done = reviews.filter(function (r) { return r.status === 'completed'; });
-  const changed = done.filter(function (r) { const a = r.submitted && r.submitted.handler_review_audit || r.submitted && r.submitted.quick_signoff_audit; return Array.isArray(a) && a[0] && a[0].decision_changed; });
+  // Same definition as the "Review outcomes" chart, so the two always agree.
+  const changed = done.filter(function (r) { return outcomeLabel(r.submitted && r.submitted[REVIEW_KIND[r.kind].outcomeVar]) === 'Overridden'; });
   const outcomes = {};
   done.forEach(function (r) {
     let o = r.submitted && r.submitted[REVIEW_KIND[r.kind].outcomeVar];
     if (!o) { const raw = r.submittedRaw || r.submitted || {}; const k = Object.keys(raw).find(function (x) { return /outcome/i.test(x) && typeof raw[x] === 'string'; }); o = k && raw[k]; }
-    o = o || 'Not recorded';
+    o = outcomeLabel(o) || 'Not recorded';
     outcomes[o] = (outcomes[o] || 0) + 1;
   });
   res.json({
@@ -1189,8 +1228,9 @@ app.get('/api/system', auth.requireAuth('system'), wrap(async function (req, res
   const claims = await allClaims();
   const origin = originOf(req);
   res.json({
-    workflowId: WORKFLOW_ID,
-    serviceBaseUrl: (process.env.OPUS_BASE_URL || 'https://operator.opus.com/api/v1'),
+    // The workflow ID and service address are deliberately not sent to the browser.
+    workflowSet: !!WORKFLOW_ID,
+    serviceBaseUrlSet: true,
     serviceKeySet: engine.configured(),
     sessionSecretSet: auth.hasSessionSecret(),
     storage: { kind: store.kind(), envNames: store.envNames() },
@@ -1206,6 +1246,9 @@ app.get('/api/system', auth.requireAuth('system'), wrap(async function (req, res
     missing: missingEnv(),
     counts: { claims: claims.length, reviews: reviews.length, pendingReviews: reviews.filter(function (r) { return r.status === 'pending'; }).length },
     unlinked: reviews.filter(function (r) { return !r.claimId; }).map(function (r) { return reviewRow(r, null); }),
+    // Finished with a proposed decision but no handler review on record (its review never matched).
+    noReview: claims.filter(function (c) { return c.engineStatus === 'COMPLETED' && !c.reviewId && !c.confirmedDecision; })
+      .map(function (c) { return { id: c.id, title: cleanTitle(c.title), claimReference: c.claimReference || null, createdAt: c.createdAt, decision: c.coverageDecision || null }; }),
     recentClaims: claims.sort(function (a, b) { return String(b.createdAt).localeCompare(String(a.createdAt)); }).slice(0, 30).map(function (c) { return { id: c.id, title: c.title, claimReference: c.claimReference || null, createdAt: c.createdAt }; })
   });
 }));
@@ -1218,6 +1261,16 @@ app.post('/api/reviews/:id/link', json, auth.requireAuth('system'), wrap(async f
   c.reviewId = r.id; c.reviewKind = r.kind;
   await saveReview(r); await saveClaim(c);
   res.json({ ok: true });
+}));
+
+// Clear every review that never matched a claim (e.g. test deliveries) in one go.
+app.post('/api/reviews/dismiss-unmatched', auth.requireAuth('system'), wrap(async function (req, res) {
+  let n = 0;
+  for (const r of await allReviews()) {
+    if (r.claimId) continue;
+    r.dismissed = true; await saveReview(r); await store.listRemove('reviews', r.id); n++;
+  }
+  res.json({ ok: true, cleared: n });
 }));
 
 app.post('/api/reviews/:id/dismiss', auth.requireAuth('system'), wrap(async function (req, res) {
