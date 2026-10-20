@@ -798,12 +798,33 @@ app.post('/api/claims/:id/refresh', auth.requireAuth('view'), wrap(async functio
 }));
 
 // Remove a claim from the console (does not touch the assessment record itself).
+// Its reviews are hidden too, so reviewers' queues and counts stay in step with the claims list.
+async function removeClaim(c, reviews) {
+  c.deleted = true; await saveClaim(c);
+  await store.listRemove('claims', c.id);
+  for (const r of reviews.filter(function (r) { return r.claimId === c.id; })) { r.dismissed = true; await saveReview(r); }
+}
 app.delete('/api/claims/:id', auth.requireAuth('users'), wrap(async function (req, res) {
   const c = await getClaim(req.params.id);
   if (!c || c.deleted) return res.status(404).json({ error: 'Claim not found.' });
-  c.deleted = true; await saveClaim(c);
-  await store.listRemove('claims', c.id);
+  await removeClaim(c, await allReviews());
   res.json({ ok: true });
+}));
+
+// Remove several claims at once (admin "Remove selected" / "Clear all claims").
+app.post('/api/claims/remove', json, auth.requireAuth('users'), wrap(async function (req, res) {
+  const b = req.body || {};
+  let targets;
+  if (b.all === true) targets = await allClaims();
+  else {
+    const ids = Array.isArray(b.ids) ? b.ids.map(String).slice(0, 1000) : [];
+    if (!ids.length) return res.status(400).json({ error: 'Choose at least one claim.' });
+    targets = [];
+    for (const id of ids) { const c = await getClaim(id); if (c && !c.deleted) targets.push(c); }
+  }
+  const reviews = await allReviews();
+  for (const c of targets) await removeClaim(c, reviews);
+  res.json({ ok: true, removed: targets.length });
 }));
 
 // ---------------------------------------------------------------------------
