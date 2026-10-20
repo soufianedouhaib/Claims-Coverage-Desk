@@ -9,7 +9,7 @@ AP.boot({
       '<div class="page-head"><div><h1>' + (AP.can(me, 'view_all') ? 'All claims' : me.role === 'intake' ? 'My claims' : 'My claims to review') + '</h1><div class="sub">' +
       (AP.can(me, 'view_all') ? 'Every claim submitted for coverage assessment.' : me.role === 'intake' ? 'The claims you submitted for coverage assessment.' :
         AP.can(me, 'review_quick') ? 'Claims the assessment routed to quick sign-off.' : 'Claims the assessment routed to detailed review.') + '</div></div><div class="actions">' +
-      (AP.can(me, 'users') ? '<button class="btn danger" id="clearAll" type="button" hidden>Clear all claims</button>' : '') +
+      (AP.can(me, 'users') ? '<button class="btn danger" id="clearAll" type="button">Clear claims</button>' : '') +
       (AP.can(me, 'export') ? '<a class="btn" href="/api/claims.csv">Export CSV</a>' : '') +
       (AP.can(me, 'submit') ? '<a class="btn primary" href="/new-claim.html">New claim</a>' : '') + '</div></div>' +
       '<div class="card"><div class="card-head"><div class="toolbar" style="flex:1">' +
@@ -66,15 +66,28 @@ AP.boot({
       var n = Object.keys(picked).length;
       document.getElementById('selBar').hidden = !n;
       document.getElementById('selCount').textContent = n + ' selected';
-      document.getElementById('clearAll').hidden = !rows.length;
     }
-    function removeClaims(body, n, done) {
-      var what = body.all ? 'all ' + n + ' claims' : n === 1 ? 'this claim' : 'these ' + n + ' claims';
-      AP.modal(body.all ? 'Clear all claims?' : 'Remove ' + (n === 1 ? 'claim' : n + ' claims') + '?',
-        '<p>This removes ' + what + ' from the console for everyone, along with their reviews. The documents and the assessment records are not deleted, and this cannot be undone here.</p>', [
+    var KEEP = 3;
+    function removeClaims(body, n) {
+      var title, text, go;
+      if (body.all) {
+        var going = rows.length - KEEP;
+        if (going <= 0) {
+          AP.modal('Nothing to clear', '<p>' + (rows.length ? 'Clearing always keeps the ' + KEEP + ' most recent claims, and there ' + (rows.length === 1 ? 'is only 1 claim.' : 'are only ' + rows.length + ' claims.') : 'There are no claims to clear.') + '</p>', [{ label: 'Close' }]);
+          return;
+        }
+        title = 'Clear claims?';
+        text = 'Remove ' + going + ' of the ' + rows.length + ' claims, keeping the ' + KEEP + ' most recent? This ignores the search and filter above.';
+        go = 'Clear ' + going;
+      } else {
+        title = 'Remove ' + (n === 1 ? 'claim' : n + ' claims') + '?';
+        text = 'Remove ' + (n === 1 ? 'this claim' : 'these ' + n + ' claims') + '?';
+        go = 'Remove';
+      }
+      AP.modal(title, '<p>' + text + ' Their reviews are removed too. The documents and the assessment records are not deleted, and this cannot be undone here.</p>', [
         { label: 'Cancel' },
-        { label: body.all ? 'Clear all' : 'Remove', danger: true, onClick: function () {
-          AP.api('POST', '/api/claims/remove', body).then(function (j) { picked = {}; AP.toast(j.removed + (j.removed === 1 ? ' claim' : ' claims') + ' removed'); load(); if (done) done(); })
+        { label: go, danger: true, onClick: function () {
+          AP.api('POST', '/api/claims/remove', body).then(function (j) { picked = {}; AP.toast(j.removed + (j.removed === 1 ? ' claim' : ' claims') + ' removed'); load(); })
             .catch(function (e) { AP.toast(e.message); });
         } }
       ]);

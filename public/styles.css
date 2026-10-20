@@ -441,3 +441,5 @@ table.data tr.picked td { background: var(--surface-2); }
 .select-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; width: 100%; padding-top: 10px; font-size: 13px; font-weight: 600; }
 .select-bar #selCount { margin-right: auto; }
 @media (max-width: 700px) { table.data.cards td.pick { float: right; width: auto; } }
+
+.count-pill { display: inline-block; background: var(--muted-soft); color: var(--text-2); border-radius: 99px; padding: 0 8px; font-size: 12px; font-weight: 600; margin-left: 6px; vertical-align: 2px; }
