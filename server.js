@@ -822,11 +822,15 @@ app.delete('/api/claims/:id', auth.requireAuth('users'), wrap(async function (re
   res.json({ ok: true });
 }));
 
+const KEEP_ON_CLEAR = 3;
 // Remove several claims at once (admin "Remove selected" / "Clear all claims").
 app.post('/api/claims/remove', json, auth.requireAuth('users'), wrap(async function (req, res) {
   const b = req.body || {};
   let targets;
-  if (b.all === true) targets = await allClaims();
+  if (b.all === true) {
+    // "Clear claims" always keeps the most recent few, whatever filters are on screen.
+    targets = (await allClaims()).sort(function (a, b) { return String(b.createdAt).localeCompare(String(a.createdAt)); }).slice(KEEP_ON_CLEAR);
+  }
   else {
     const ids = Array.isArray(b.ids) ? b.ids.map(String).slice(0, 1000) : [];
     if (!ids.length) return res.status(400).json({ error: 'Choose at least one claim.' });
@@ -835,7 +839,7 @@ app.post('/api/claims/remove', json, auth.requireAuth('users'), wrap(async funct
   }
   const reviews = await allReviews();
   for (const c of targets) await removeClaim(c, reviews);
-  res.json({ ok: true, removed: targets.length });
+  res.json({ ok: true, removed: targets.length, kept: b.all === true ? KEEP_ON_CLEAR : undefined });
 }));
 
 // ---------------------------------------------------------------------------
