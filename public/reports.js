@@ -86,10 +86,11 @@ AP.boot({
         document.getElementById('scope').textContent = (SCOPE[d.scope] || '') + ' · last ' + d.days + ' days';
         var t = d.totals;
         var tiles = [
-          ['Claims', t.claims, null], ['Completed', t.completed, null], ['Awaiting review', t.awaiting, null], ['Did not finish', t.problems, null],
+          ['Claims', t.claims, 'Submitted in this period'], ['Completed', t.completed, 'Coverage position finished'],
+          ['Awaiting review', t.awaiting, 'Waiting for a handler right now'], ['Did not finish', t.problems, 'Stopped before the coverage position'],
           ['Avg. submit to position', dur(t.avgTurnaroundMin), 'From submission to the finished coverage position'],
           ['Avg. review wait', dur(t.avgReviewWaitMin), 'From the review reaching the console to the handler\'s decision'],
-          ['Handler overrides', t.reviewsDone ? t.overrides + ' of ' + t.reviewsDone : '—', 'Reviews where the handler changed the proposed decision']
+          ['Handler overrides', t.reviewsDone ? t.overrides + ' of ' + t.reviewsDone : '—', 'Completed reviews with the outcome Overridden']
         ];
         if (d.scope === 'all' || d.scope === 'mine') tiles.splice(4, 0, ['Quick / detailed', t.quick + ' / ' + t.detailed, 'Claims routed to quick sign-off / detailed review']);
         body.innerHTML =

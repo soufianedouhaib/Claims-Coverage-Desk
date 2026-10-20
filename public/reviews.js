@@ -27,7 +27,7 @@ AP.boot({
             '<td data-label="Proposed decision">' + AP.decisionPill(r.proposedDecision) + '</td>' +
             '<td data-label="Confidence">' + AP.fmtPct(r.confidence) + '</td>' +
             '<td data-label="' + (pending ? 'Waiting' : 'Reviewed') + '" class="nowrap">' + when + '</td>' +
-            '<td data-label="' + (pending ? 'Status' : 'Outcome') + '">' + last + '</td></tr>';
+            '<td data-label="' + (pending ? 'Status' : 'Outcome') + '">' + last + '</td>' + AP.actionCell(r, me) + '</tr>';
         }).join('') + '</tbody></table></div>';
     }
 
@@ -53,7 +53,7 @@ AP.boot({
       var pl = document.getElementById('pendingList'), dl = document.getElementById('doneList');
       pl.innerHTML = pending.length ? table(pending, true) : '<div class="empty">Nothing waiting. New reviews appear here automatically.</div>';
       dl.innerHTML = done.length ? table(done, false) : '<div class="empty">No previous reviews yet.</div>';
-      main.querySelectorAll('tr.click').forEach(function (tr) { tr.onclick = function () { location.href = '/review.html?id=' + encodeURIComponent(tr.dataset.id); }; });
+      main.querySelectorAll('tr.click').forEach(function (tr) { tr.onclick = function (e) { if (e.target.closest('.row-action a')) return; location.href = '/review.html?id=' + encodeURIComponent(tr.dataset.id); }; });
     }
     function sync() {
       var u = new URL(location.href); u.searchParams.set('kind', state.kind); u.searchParams.delete('show'); history.replaceState(null, '', u);

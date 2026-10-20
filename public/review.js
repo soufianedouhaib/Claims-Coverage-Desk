@@ -44,7 +44,7 @@ AP.boot({
       a.push('<section class="card"><div class="card-head"><h2>Proposed coverage position</h2></div><div class="card-body">' +
         '<div class="decision" style="margin-bottom:14px"><div style="flex:1;min-width:180px"><div class="small muted">Proposed decision</div><div class="big">' + E(AP.decisionText(proposed) || '—') + '</div></div>' +
         '<div class="meter">Confidence <div class="bar"><span style="width:' + width(conf) + '%"></span></div><strong>' + AP.fmtPct(conf) + '</strong></div>' +
-        (settle != null ? '<div><div class="small muted">Recommended settlement after excess</div><div class="big">' + AP.fmtNum(settle) + '</div><div class="small muted">Non-binding, for your review only</div></div>' : '') +
+        (settle != null ? '<div><div class="small muted">Recommended settlement after excess</div><div class="big">' + AP.fmtMoney(settle) + '</div><div class="small muted">Non-binding, for your review only</div></div>' : '') +
         '</div>' + AP.kv([
           ['Reasons', pick(d, 'coverage_decision_reasons')],
           ['Applicable limits', pick(d, 'applicable_limits')],
@@ -83,10 +83,10 @@ AP.boot({
         var proposedCanon = canonical(proposed);
         if (proposed && !proposedCanon && decOpts.indexOf(proposed) < 0) decOpts.unshift(proposed);
         var defDec = draft.confirmed_coverage_decision || proposedCanon || proposed || '';
-        f = '<form class="card card-pad form-grid" id="f" novalidate><h2>Your decision</h2>' +
+        f = '<form class="card decision-form" id="f" novalidate><div class="df-head"><h2>Your decision</h2></div><div class="df-body form-grid">' +
           '<fieldset style="border:0;padding:0;margin:0"><legend class="req" style="font-weight:550;font-size:13px;margin-bottom:6px">Review outcome</legend>' +
           d.outcomes.map(function (o) {
-            return '<label style="display:flex;gap:8px;align-items:center;padding:6px 0;cursor:pointer"><input type="radio" name="outcome" value="' + E(o) + '"' + (draft.outcome === o ? ' checked' : '') + '> ' + E(o) + '</label>';
+            return '<label style="display:flex;gap:8px;align-items:center;padding:6px 0;cursor:pointer"><input type="radio" name="outcome" value="' + E(o) + '"' + (draft.outcome === o ? ' checked' : '') + '> ' + E(AP.outcomeLabel(o)) + '</label>';
           }).join('') + '</fieldset>' +
           '<label class="field"><span class="req">Confirmed coverage decision</span><select id="decision">' +
           decOpts.map(function (o) { return '<option' + (o === defDec ? ' selected' : '') + '>' + E(o) + '</option>'; }).join('') + '</select>' +
@@ -102,13 +102,13 @@ AP.boot({
           (d.reviewedAt ? '<label class="field"><span class="req">Reviewed on</span><span class="hint">Choose the date from the calendar. It is sent to the workflow as <strong id="dateOut" class="mono">' + E(d.reviewedAt.example) + '</strong></span>' +
             '<input type="date" id="reviewedOn" value="' + today() + '" max="' + today() + '" required></label>' : '') +
           '<div class="note-box small">Recorded as reviewed by <strong>' + E(me.name) + '</strong>' + (d.reviewedAt ? '' : ' with the time you submit') + '. This confirms or overrides the coverage position only; it does not authorise, calculate or settle any payment.</div>' +
-          '<div class="alert bad" id="err" role="alert"' + (r.lastError ? '' : ' hidden') + '>' + E(r.lastError || '') + '</div>' +
-          '<button class="btn primary" type="submit" id="go">Submit decision</button></form>';
+          '</div><div class="df-foot"><div class="alert bad" id="err" role="alert"' + (r.lastError ? '' : ' hidden') + '>' + E(r.lastError || '') + '</div>' +
+          '<button class="btn primary" type="submit" id="go">Submit decision</button></div></form>';
       } else {
         var s2 = d.submitted || {};
         f = '<section class="card"><div class="card-head"><h2>Decision</h2>' + AP.reviewStatusPill(r.status) + '</div><div class="card-body">' +
           (r.status === 'completed' ? AP.kv([
-            ['Outcome', s2[outcomeVar]], ['Confirmed decision', AP.decisionPill(s2.confirmed_coverage_decision), true],
+            ['Outcome', AP.outcomeLabel(s2[outcomeVar])], ['Confirmed decision', AP.decisionPill(s2.confirmed_coverage_decision), true],
             s2.handler_override_reason ? ['Override reason', s2.handler_override_reason] : null, ['Notes', s2.handler_notes],
             ['Reviewed by', r.completedByName], ['Reviewed at', AP.fmtDate(r.completedAt), true]])
             : '<div class="alert warn">' + E(r.lastError || 'This review is no longer open.') + '</div><p class="small muted" style="margin-top:10px">If the review step ran out of time, the claim shows as timed out. An administrator can check the review step\'s time limit.</p>') +
@@ -131,7 +131,7 @@ AP.boot({
         else if (changed()) hint.textContent = 'Changed from the proposed decision (' + AP.decisionText(proposed) + ').';
         else hint.textContent = 'Same as the proposed decision.';
         if (ov) {
-          var need = o === 'Overridden' || changed();
+          var need = AP.isOverride(o) || changed();
           document.getElementById('ovLabel').className = need ? 'req' : '';
         }
         saveDraft({ outcome: o, confirmed_coverage_decision: dec.value, notes: notes.value, override: ov ? ov.value : '' });
@@ -148,7 +148,7 @@ AP.boot({
         if (!o) problems.push('Choose a review outcome.');
         if (!notes.value.trim()) problems.push('Add handler notes.');
         if (o === 'Confirmed' && changed()) problems.push('You chose "Confirmed" but changed the decision. Choose an override outcome or set the decision back.');
-        if (ov && (o === 'Overridden' || changed()) && !ov.value.trim()) problems.push('Give an override reason.');
+        if (ov && (AP.isOverride(o) || changed()) && !ov.value.trim()) problems.push('Give an override reason.');
         if (problems.length) { err.innerHTML = problems.map(E).join('<br>'); err.hidden = false; return; }
         var values = { confirmed_coverage_decision: dec.value, handler_notes: notes.value.trim() };
         values[outcomeVar] = o;

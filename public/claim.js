@@ -28,11 +28,11 @@ AP.boot({
       return '<details class="more"><summary>' + E(title) + '</summary><div class="inner stack">' +
         items.map(function (x) { return '<div><h3 style="margin-bottom:6px">' + E(x[0]) + '</h3>' + R(x[1], x[0]) + '</div>'; }).join('') + '</div></details>';
     }
-    function money(v) { return v == null || v === '' ? '<span class="muted">—</span>' : AP.fmtNum(v); }
+    function money(v) { return v == null || v === '' ? '<span class="muted">—</span>' : AP.fmtMoney(v); }
 
     function render(d) {
       var c = d.claim;
-      // Details for "Contact Opus" from this page.
+      // Details for "Contact support" from this page.
       AP.setSupportContext(function () {
         var s = d.support || {};
         var failedStep = (d.steps || []).find(function (x) { return x.state === 'failed'; });
@@ -60,14 +60,12 @@ AP.boot({
       if (AP.qs('new') === '1' && (c.status === 'processing' || c.status === 'queued')) {
         left.push('<div class="alert ok">Claim submitted. The assessment usually takes a few minutes; this page updates by itself.</div>');
       }
-      // Test sample: show what should happen and whether it did.
+      // Sample claim: what the sample is designed to show (the claim record does not grade itself).
       var smp = c.sampleId && SAMPLES ? SAMPLES.find(function (x) { return x.id === c.sampleId; }) : null;
       if (smp) {
-        var routeNow = c.reviewKind || null;
-        var routeTxt = routeNow ? (routeNow === smp.route ? '<span class="match ok">✓ Went to the expected review</span>' : '<span class="match bad">≠ Went to ' + E(AP.ROUTES[routeNow].label) + ' instead</span>') : '<span class="muted small">Review not reached yet</span>';
-        left.push('<section class="card card-pad"><div class="sample-num" style="margin-bottom:4px">Test sample ' + smp.number + '</div>' +
+        left.push('<section class="card card-pad"><div class="sample-num" style="margin-bottom:4px">Sample · ' + E(smp.title) + '</div>' +
           '<div class="expect"><div><div class="small muted">Expected decision</div>' + AP.decisionPill(smp.expectedDecision) + '</div>' +
-          '<div><div class="small muted">Expected review</div>' + AP.routeChip(smp.route) + '</div><div>' + routeTxt + '</div></div>' +
+          '<div><div class="small muted">Expected review</div>' + AP.routeChip(smp.route) + '</div></div>' +
           '<p class="small muted" style="margin:10px 0 0">' + E(smp.why) + '</p></section>');
       }
       if (c.error && ['failed', 'cancelled', 'timed_out'].indexOf(c.status) >= 0) {

@@ -14,8 +14,8 @@ AP.boot({
     main.innerHTML =
       '<div class="page-head"><div><div class="crumb"><a href="/claims.html">Claims</a> / New</div><h1>Submit a claim for coverage assessment</h1>' +
       '<div class="sub">Add the three documents. The assessment reads them, checks the policy, interprets the wording and proposes a coverage position for a handler to confirm.</div></div></div>' +
-      '<section class="card samples" id="samples" aria-labelledby="samplesTitle"><div class="card-head"><div><h2 id="samplesTitle">Test samples</h2>' +
-      '<div class="small muted">Complete claim packs with known answers. One click uploads all the documents and starts the assessment.</div></div>' +
+      '<section class="card samples" id="samples" aria-labelledby="samplesTitle"><div class="card-head"><div><h2 id="samplesTitle">Samples</h2>' +
+      '<div class="small muted">Complete claim packs, each showing a different route. One click uploads all the documents and starts the assessment.</div></div>' +
       '<div class="route-legend">' + AP.routeChip('quick') + AP.routeChip('detailed') + '</div></div>' +
       '<div class="card-body"><div class="sample-grid" id="sampleGrid"><div class="muted small">Loading samples…</div></div></div></section>' +
       '<form id="f" class="split" novalidate>' +
@@ -125,12 +125,12 @@ AP.boot({
       });
     });
 
-    // ---------- test samples ----------
+    // ---------- samples ----------
     var samples = [];
     function markSample() {
       document.querySelectorAll('.sample-card').forEach(function (c) { c.classList.toggle('selected', !!currentSample && c.dataset.id === currentSample.id); });
       var badge = document.getElementById('sampleBadge');
-      if (badge) { badge.hidden = !currentSample; if (currentSample) badge.innerHTML = 'Using <strong>Sample ' + currentSample.number + ': ' + E(currentSample.title) + '</strong> ' + AP.routeChip(currentSample.route); }
+      if (badge) { badge.hidden = !currentSample; if (currentSample) badge.innerHTML = 'Using the sample <strong>' + E(currentSample.title) + '</strong> ' + AP.routeChip(currentSample.route); }
     }
     function fetchFile(s, name) {
       return fetch('/samples/' + s.id + '/' + encodeURIComponent(name)).then(function (r) {
@@ -144,7 +144,7 @@ AP.boot({
         picked.evidence = [];
         setFile('fnol', [fs[0]], true); setFile('schedule', [fs[1]], true); setFile('wording', [fs[2]], true);
         setFile('evidence', fs.slice(3), true);
-        document.getElementById('title').value = 'Sample ' + s.number + ': ' + s.title;
+        document.getElementById('title').value = s.title;
         currentSample = s; markSample();
       });
     }
@@ -153,7 +153,7 @@ AP.boot({
       var files = [['Claim notification', s.files.fnol], ['Policy schedule', s.files.schedule], ['Policy wording', s.files.wording]]
         .concat(s.files.evidence.map(function (n) { return ['Evidence', n]; }));
       return '<article class="sample-card route-' + s.route + '" data-id="' + E(s.id) + '">' +
-        '<div class="sample-top"><span class="sample-num">Sample ' + s.number + '</span><span class="small muted">' + E(s.claimReference) + '</span></div>' +
+        '<div class="sample-top"><span class="sample-num">Sample</span><span class="small muted">' + E(s.claimReference) + '</span></div>' +
         '<h3>' + E(s.title) + '</h3><div class="small muted">' + E(s.place) + ' · ' + E(s.peril) + '</div>' +
         '<div class="sample-route">' + AP.routeChip(s.route, true) + '</div>' +
         '<dl class="sample-facts"><dt>Expected</dt><dd>' + AP.decisionPill(s.expectedDecision) + '</dd><dt>Claimed</dt><dd>' + E(s.claimed) + '</dd><dt>Outcome</dt><dd>' + E(s.expectedSettlement) + '</dd></dl>' +

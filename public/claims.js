@@ -36,7 +36,7 @@ AP.boot({
       if (!shown.length) { list.innerHTML = '<div class="empty">No claims match these filters.</div>'; selBar(); return; }
       var allOn = shown.length && shown.every(function (r) { return picked[r.id]; });
       list.innerHTML = '<div class="table-wrap"><table class="data cards"><thead><tr>' +
-        (admin ? '<th class="pick"><input type="checkbox" id="pickAll" aria-label="Select all shown claims"' + (allOn ? ' checked' : '') + '></th>' : '') + '<th>Claim</th><th>Policy</th><th>Status</th><th>Coverage decision</th><th>Submitted</th></tr></thead><tbody>' +
+        (admin ? '<th class="pick"><input type="checkbox" id="pickAll" aria-label="Select all shown claims"' + (allOn ? ' checked' : '') + '></th>' : '') + '<th>Claim</th><th>Policy</th><th>Status</th><th>Coverage decision</th><th>Submitted</th><th><span class="sr-only">Action</span></th></tr></thead><tbody>' +
         shown.map(function (r) {
           var prog = '';
           if ((r.status === 'processing' || r.status === 'queued') && r.progress) {
@@ -45,13 +45,13 @@ AP.boot({
           if (r.error && ['failed', 'cancelled', 'timed_out'].indexOf(r.status) >= 0) prog = '<div class="sub">' + E(r.error) + '</div>';
           return '<tr class="click' + (picked[r.id] ? ' picked' : '') + '" data-id="' + E(r.id) + '">' +
             (admin ? '<td class="pick"><input type="checkbox" class="pick-one" data-id="' + E(r.id) + '" aria-label="Select ' + E(r.claimReference || r.title || 'claim') + '"' + (picked[r.id] ? ' checked' : '') + '></td>' : '') +
-            '<td data-label="Claim"><div class="primary-cell">' + E(r.claimReference || 'Reference pending') + (r.sampleId ? ' <span class="pill plain">Test sample</span>' : '') + '</div><div class="sub">' + E([r.insuredName, r.title].filter(Boolean).join(' · ')) + '</div></td>' +
+            '<td data-label="Claim"><div class="primary-cell">' + E(r.claimReference || 'Reference pending') + (r.sampleId ? ' <span class="pill plain">Sample</span>' : '') + '</div><div class="sub">' + E([r.insuredName, r.title].filter(Boolean).join(' · ')) + '</div><div class="sub mono">Case ' + E(r.id) + '</div></td>' +
             '<td data-label="Policy">' + (r.policyNumber ? '<span class="id">' + E(r.policyNumber) + '</span>' : '<span class="muted">—</span>') + '</td>' +
-            '<td data-label="Status">' + AP.casePill(r) + prog + '</td>' +
+            '<td data-label="Status">' + AP.casePill(r) + prog + AP.repeatNote(r) + '</td>' +
             '<td data-label="Coverage decision">' + AP.decisionPill(r.decision, r.decision ? r.decisionConfirmed : undefined) + '</td>' +
-            '<td data-label="Submitted" class="nowrap">' + AP.fmtDate(r.createdAt) + '<div class="sub">' + E(r.createdByName || '') + '</div></td></tr>';
+            '<td data-label="Submitted" class="nowrap">' + AP.fmtDate(r.createdAt) + '<div class="sub">' + E(r.createdByName || '') + '</div></td>' + AP.actionCell(r, me) + '</tr>';
         }).join('') + '</tbody></table></div>';
-      list.querySelectorAll('tr.click').forEach(function (tr) { tr.onclick = function (e) { if (e.target.closest('.pick')) return; location.href = '/claim.html?id=' + encodeURIComponent(tr.dataset.id); }; });
+      list.querySelectorAll('tr.click').forEach(function (tr) { tr.onclick = function (e) { if (e.target.closest('.pick') || e.target.closest('.row-action a')) return; location.href = '/claim.html?id=' + encodeURIComponent(tr.dataset.id); }; });
       if (admin) {
         list.querySelectorAll('td.pick').forEach(function (td) { td.onclick = function (e) { if (e.target.tagName !== 'INPUT') { var cb = td.querySelector('input'); cb.checked = !cb.checked; cb.onchange(); } }; });
         list.querySelectorAll('.pick-one').forEach(function (cb) { cb.onchange = function () { if (cb.checked) picked[cb.dataset.id] = 1; else delete picked[cb.dataset.id]; draw(); }; });

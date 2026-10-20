@@ -54,6 +54,21 @@
     if (n == null || n === '' || isNaN(Number(n))) return n == null || n === '' ? '—' : esc(n);
     return Number(n).toLocaleString(undefined, { minimumFractionDigits: dp == null ? 2 : dp, maximumFractionDigits: dp == null ? 2 : dp });
   }
+  // Money as the rest of the app shows it: $8,680 (cents only when there are any).
+  function fmtMoney(n) {
+    if (n == null || n === '' || isNaN(Number(n))) return n == null || n === '' ? '—' : esc(n);
+    var v = Number(n), whole = Math.round(v * 100) % 100 === 0;
+    return (v < 0 ? '-$' : '$') + Math.abs(v).toLocaleString('en-AU', { minimumFractionDigits: whole ? 0 : 2, maximumFractionDigits: whole ? 0 : 2 });
+  }
+  var MONEY_KEY = /(amount|limit|excess|settlement|sum_insured|sums_insured|premium|cost|price|value|payable|claimed)/i;
+  // Raw numbers in text from the assessment ("16450.0") read as 16,450.
+  function tidyNumbers(s) {
+    return String(s).replace(/(^|[^\w.\-\/])(\d{4,})\.(\d{1,2})(?![\d.])/g, function (m, pre, int, dec) {
+      if (int.length === 4 && /^(19|20)/.test(int) && dec.length === 2 && Number(dec) > 0) return m; // looks like a year/section, leave it
+      var n = Number(int + '.' + dec), whole = Number(dec) === 0;
+      return pre + n.toLocaleString('en-AU', { minimumFractionDigits: whole ? 0 : 2, maximumFractionDigits: whole ? 0 : 2 });
+    });
+  }
   function fmtPct(n) {
     if (n == null || n === '' || isNaN(Number(n))) return '—';
     var v = Number(n); if (v <= 1) v = v * 100;
@@ -117,12 +132,13 @@
     if (typeof v === 'boolean') return v ? 'Yes' : 'No';
     if (typeof v === 'number') {
       if (/confidence|score/i.test(key || '') && v <= 1) return fmtPct(v);
-      return esc(v.toLocaleString());
+      if (MONEY_KEY.test(key || '') && !/count|number|items/i.test(key || '')) return '<span class="num">' + esc(fmtMoney(v)) + '</span>';
+      return '<span class="num">' + esc(v.toLocaleString('en-AU')) + '</span>';
     }
     var s = String(v);
     if (/^https?:\/\//.test(s)) return '<span class="muted">file</span>';
     if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s)) return esc(fmtDate(s));
-    return '<span class="pre">' + esc(s) + '</span>';
+    return '<span class="pre">' + esc(tidyNumbers(s)) + '</span>';
   }
   function renderValue(v, key, depth) {
     depth = depth || 0;
@@ -180,9 +196,10 @@
     return { el: back, close: close };
   }
 
-  // ---------- chrome: icon rail that expands on hover ----------
-  // A narrow rail is always visible. Hovering (or keyboard focus) expands it over the page and
-  // blurs what is behind; moving away shrinks it again. On phones it is a drawer behind the menu button.
+  // ---------- chrome: the sidebar ----------
+  // Open and labelled by default, with the review count beside the queue. The chevron folds it to
+  // an icon strip (remembered per browser); while folded, hovering opens it over the page and blurs
+  // what is behind. On phones it is a drawer behind the menu button.
   function svg(d) { return '<svg class="side-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>'; }
   var ICONS = {
     dash: svg('<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>'),
@@ -195,7 +212,8 @@
     support: svg('<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.5v.4M12 17h.01"/>'),
     account: svg('<circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/>'),
     signout: svg('<path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 16l-4-4 4-4M6 12h10"/>'),
-    menu: svg('<path d="M4 7h16M4 12h16M4 17h16"/>')
+    menu: svg('<path d="M4 7h16M4 12h16M4 17h16"/>'),
+    chevron: svg('<path d="M15 6l-6 6 6 6"/>')
   };
   var LOGO = '<svg width="30" height="30" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#ffffff" fill-opacity=".16"/><path d="M16 6l8 3v6.2c0 5-3.4 9.2-8 10.8-4.6-1.6-8-5.8-8-10.8V9l8-3z" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round"/><path d="M12.3 15.8l2.6 2.6 4.8-5" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
@@ -226,11 +244,12 @@
     app.innerHTML =
       '<div class="topbar"><button type="button" class="side-btn" id="navToggle" aria-label="Open menu" aria-expanded="false">' + ICONS.menu + '</button>' + LOGO + '<span>' + APP_NAME + '</span></div>' +
       '<aside class="side" id="side" aria-label="Main menu">' +
-        '<div class="side-top">' + LOGO + '<div class="side-brand"><strong>' + APP_NAME + '</strong><small>Coverage assessment</small></div></div>' +
+        '<div class="side-top">' + LOGO + '<div class="side-brand"><strong>' + APP_NAME + '</strong><small>Coverage assessment</small></div>' +
+          '<button type="button" class="side-toggle" id="sideToggle" aria-controls="side" aria-expanded="true" aria-label="Collapse the menu" title="Collapse the menu">' + ICONS.chevron + '</button></div>' +
         '<nav class="side-nav">' + navHtml + '</nav>' +
         '<div class="side-foot">' +
           '<button type="button" class="side-link side-action" id="themeBtn" title="Light / dark">' + ICONS.theme + '<span class="side-label">Light / dark</span></button>' +
-          '<button type="button" class="side-link side-action" id="supportBtn" title="Contact Opus">' + ICONS.support + '<span class="side-label">Contact Opus</span></button>' +
+          '<button type="button" class="side-link side-action" id="supportBtn" title="Contact support">' + ICONS.support + '<span class="side-label">Contact support</span></button>' +
           '<a class="side-link side-action' + (active === 'account' ? ' is-current' : '') + '" href="/account.html" title="Account">' + ICONS.account + '<span class="side-label">Account</span></a>' +
           '<div class="side-user" title="' + esc(me.email) + '"><span class="avatar">' + esc(initials) + '</span><span class="side-label"><strong>' + esc(me.name) + '</strong><small>' + esc(me.roleLabel) + '</small></span></div>' +
           '<button type="button" class="side-link side-action danger" id="signOut" title="Sign out">' + ICONS.signout + '<span class="side-label">Sign out</span></button>' +
@@ -244,10 +263,20 @@
       api('POST', '/api/auth/logout').finally(function () { location.href = '/'; });
     };
     var side = document.getElementById('side');
-    function suppressRail() { if (document.activeElement && side.contains(document.activeElement)) document.activeElement.blur(); document.body.classList.add('rail-suppress'); }
-    side.addEventListener('mouseleave', function () { document.body.classList.remove('rail-suppress'); });
+    function blurSide() { if (document.activeElement && side.contains(document.activeElement)) document.activeElement.blur(); }
+    function setCollapsed(next) {
+      document.body.classList.toggle('side-collapsed', !!next);
+      var t = document.getElementById('sideToggle');
+      t.setAttribute('aria-expanded', next ? 'false' : 'true');
+      t.setAttribute('aria-label', next ? 'Expand the menu' : 'Collapse the menu');
+      t.title = next ? 'Expand the menu' : 'Collapse the menu';
+      try { localStorage.setItem('ccd-sidebar', next ? 'collapsed' : 'open'); } catch (e) {}
+    }
+    var saved = null; try { saved = localStorage.getItem('ccd-sidebar'); } catch (e) {}
+    setCollapsed(saved === 'collapsed');
+    document.getElementById('sideToggle').onclick = function () { setCollapsed(!document.body.classList.contains('side-collapsed')); blurSide(); };
     document.getElementById('themeBtn').onclick = function () { cycleTheme(); };
-    document.getElementById('supportBtn').onclick = function () { suppressRail(); setDrawer(false); openSupport(me); };
+    document.getElementById('supportBtn').onclick = function () { blurSide(); setDrawer(false); openSupport(me); };
     function setDrawer(open) {
       document.body.classList.toggle('nav-open', open);
       document.getElementById('navToggle').setAttribute('aria-expanded', open ? 'true' : 'false');
@@ -262,27 +291,25 @@
     api('GET', '/api/reviews').then(function (j) {
       var n = j.reviews.filter(function (r) { return r.status === 'pending'; }).length;
       var b = document.getElementById('reviewBadge');
-      if (b) { b.textContent = n; b.hidden = !n; }
+      if (b) { b.textContent = n; b.hidden = false; b.classList.toggle('zero', !n); b.title = n + (n === 1 ? ' review' : ' reviews') + ' waiting'; }
     }).catch(function () {});
   }
 
+  // Light unless the person picked dark with the toggle (the device setting is not followed).
   function applyTheme() {
     var t = null;
     try { t = localStorage.getItem('ccd-theme'); } catch (e) {}
-    if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
-    else document.documentElement.removeAttribute('data-theme');
+    document.documentElement.setAttribute('data-theme', t === 'dark' ? 'dark' : 'light');
   }
   function cycleTheme() {
-    var dark = document.documentElement.getAttribute('data-theme') === 'dark' ||
-      (!document.documentElement.getAttribute('data-theme') && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
-    var next = dark ? 'light' : 'dark';
+    var next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
     try { localStorage.setItem('ccd-theme', next); } catch (e) {}
     applyTheme();
     toast(next === 'dark' ? 'Dark theme' : 'Light theme');
   }
   applyTheme();
 
-  // ---------- Contact Opus ----------
+  // ---------- Contact support ----------
   // Writes the email to Opus support with everything they need (workflow, org, workspace and
   // case ids, status, where it stopped), and offers a screenshot of the page to attach,
   // because a mailto link cannot attach files. A page may add its own details with setSupportContext.
@@ -297,7 +324,7 @@
     var subject = APP_NAME + (d.caseId ? ' – case ' + d.caseId : '') +
       (d.failed ? ' did not finish' + (d.failedAt ? ' at ' + d.failedAt : '') : d.status ? ' (' + String(d.status).toLowerCase().replace(/_/g, ' ') + ')' : ', question');
     var parts = [
-      'Hello Opus support team,', '',
+      'Hello support team,', '',
       d.reason ? 'What went wrong: ' + d.reason : 'Describe the issue here:',
       d.failedAt ? 'Stopped at step: ' + d.failedAt : null,
       '',
@@ -356,8 +383,8 @@
     var back = document.createElement('div');
     back.className = 'modal-back'; back.id = 'support-modal';
     back.innerHTML = '<div class="modal support-modal" role="dialog" aria-modal="true" aria-labelledby="support-title">' +
-      '<div class="card-head"><h2 id="support-title">Contact Opus</h2><button type="button" class="btn small" id="support-x" aria-label="Close">Close</button></div>' +
-      '<div class="card-body"><p class="muted small" style="margin:0 0 14px">The email to Opus support is written for you, with the technical details they need. A mail link cannot attach files, so download the screenshot first and attach it to the email.</p>' +
+      '<div class="card-head"><h2 id="support-title">Contact support</h2><button type="button" class="btn small" id="support-x" aria-label="Close">Close</button></div>' +
+      '<div class="card-body"><p class="muted small" style="margin:0 0 14px">The email to the support team is written for you, with the technical details they need. A mail link cannot attach files, so download the screenshot first and attach it to the email.</p>' +
       '<dl class="kv" id="support-details"><dt>Details</dt><dd>Gathering…</dd></dl>' +
       '<div class="alert bad" id="support-error" hidden style="margin-top:12px"></div>' +
       '<div class="support-steps">' +
@@ -488,12 +515,42 @@
       (big ? '<span class="route-label">Goes to</span>' : '') + '<strong>' + r.label + '</strong><span class="route-who">' + r.who + '</span></span>';
   }
 
+  // Both review types use the same words on screen. The value sent back to the workflow is still
+  // the one each review step expects (e.g. "Non-binding override" for a quick sign-off).
+  var OUTCOME_LABEL = { 'Confirmed': 'Confirmed', 'Overridden': 'Overridden', 'Non-binding override': 'Overridden',
+    'Clarification requested': 'Returned for clarification', 'Returned for further review': 'Returned for clarification' };
+  function outcomeLabel(o) { return o ? (OUTCOME_LABEL[o] || o) : ''; }
+  function isOverride(o) { return outcomeLabel(o) === 'Overridden'; }
+
+  // Every row ends on a verb: Confirm (quick sign-off waiting for you), Review (detailed review
+  // waiting for you) or Open.
+  function rowAction(r, me) {
+    var kind = r.reviewKind || r.kind;
+    var pending = r.reviewStatus ? (r.reviewStatus === 'pending') : (r.status === 'pending');
+    var reviewId = r.reviewId || (r.kind ? r.id : null);
+    if (pending && reviewId && kind && can(me, kind === 'quick' ? 'review_quick' : 'review_detailed')) {
+      return { label: kind === 'quick' ? 'Confirm' : 'Review', href: '/review.html?id=' + encodeURIComponent(reviewId), primary: true };
+    }
+    return { label: 'Open', href: r.kind ? '/review.html?id=' + encodeURIComponent(r.id) : '/claim.html?id=' + encodeURIComponent(r.id), primary: false };
+  }
+  function actionCell(r, me) {
+    var a = rowAction(r, me);
+    return '<td class="row-action" data-label=""><a class="btn small' + (a.primary ? ' primary' : '') + '" href="' + a.href + '">' + esc(a.label) + '</a></td>';
+  }
+  // Same claim reference submitted more than once: say so, like a duplicate notice.
+  function repeatNote(r) {
+    if (!r.repeat) return '';
+    var first = r.repeat.run === 1;
+    return '<div class="sub dup-note" title="The same claim reference was submitted ' + r.repeat.of + ' times. Each run is assessed on its own, so outcomes can differ.">' +
+      (first ? 'First of ' + r.repeat.of + ' runs of this claim' : 'Run ' + r.repeat.run + ' of ' + r.repeat.of + ' · repeat of the claim first sent ' + esc(fmtDate(r.repeat.firstAt))) + '</div>';
+  }
+
   window.AP = {
     routeChip: routeChip, ROUTES: ROUTES,
     APP_NAME: APP_NAME, esc: esc, api: api, boot: boot, qs: qs, can: can,
-    fmtDate: fmtDate, fmtRel: fmtRel, fmtNum: fmtNum, fmtPct: fmtPct, humanize: humanize,
+    fmtDate: fmtDate, fmtRel: fmtRel, fmtNum: fmtNum, fmtMoney: fmtMoney, tidyNumbers: tidyNumbers, fmtPct: fmtPct, humanize: humanize,
     casePill: casePill, statusLabel: statusLabel, decisionPill: decisionPill, decisionText: decisionText, decisionClass: decisionClass,
     reviewStatusPill: reviewStatusPill, renderValue: renderValue, kv: kv, toast: toast, modal: modal, refreshBadge: refreshBadge, LOGO: LOGO,
-    openSupport: openSupport, setSupportContext: setSupportContext, cycleTheme: cycleTheme, ICONS: ICONS, animateIn: animateIn
+    openSupport: openSupport, setSupportContext: setSupportContext, cycleTheme: cycleTheme, ICONS: ICONS, animateIn: animateIn, rowAction: rowAction, actionCell: actionCell, repeatNote: repeatNote, outcomeLabel: outcomeLabel, isOverride: isOverride
   };
 })();
