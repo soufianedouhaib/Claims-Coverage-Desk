@@ -4,26 +4,32 @@
   // Already signed in? Go straight in.
   fetch('/api/me', { credentials: 'same-origin' }).then(function (r) { if (r.ok) location.replace(next); });
   var f = document.getElementById('f'), err = document.getElementById('err'), go = document.getElementById('go');
+  document.getElementById('supportBtn').onclick = function () { AP.openSupport(null); };
+  document.getElementById('supportLink').onclick = function () { AP.openSupport(null); };
 
-  // One-click demo accounts (one per role), if the administrator has not removed them.
+  // One-click accounts: the four demo accounts plus anyone the administrator added.
   AP.api('GET', '/api/auth/demo-accounts').then(function (j) {
     if (!j.enabled || !j.accounts.length) return;
     var list = document.getElementById('demoList');
     list.innerHTML = j.accounts.map(function (a) {
-      return '<button type="button" class="demo-btn" data-email="' + AP.esc(a.email) + '"><span class="demo-role">' + AP.esc(a.roleLabel) + '</span>' +
-        '<span class="demo-blurb">' + AP.esc(a.blurb) + '</span></button>';
+      var initial = String(a.name || '?').trim().charAt(0).toUpperCase();
+      return '<button type="button" class="account" data-email="' + AP.esc(a.email) + '" title="' + AP.esc(a.blurb || '') + '">' +
+        '<span class="avatar role-' + AP.esc(a.role) + '">' + AP.esc(initial) + '</span>' +
+        '<span class="account-who"><strong>' + AP.esc(a.name) + '</strong><small>' + AP.esc(a.email) + '</small></span>' +
+        '<span class="pill plain account-role">' + AP.esc(a.roleLabel) + '</span></button>';
     }).join('');
     document.getElementById('demo').hidden = false;
-    list.querySelectorAll('.demo-btn').forEach(function (b) {
+    list.querySelectorAll('.account').forEach(function (b) {
       b.onclick = function () {
         err.hidden = true;
-        list.querySelectorAll('.demo-btn').forEach(function (x) { x.disabled = true; });
-        b.querySelector('.demo-blurb').textContent = 'Signing in…';
+        list.querySelectorAll('.account').forEach(function (x) { x.disabled = true; });
+        b.classList.add('busy');
         AP.api('POST', '/api/auth/demo', { email: b.dataset.email }).then(function () { location.replace(next); })
-          .catch(function (e2) { err.textContent = e2.message; err.hidden = false; list.querySelectorAll('.demo-btn').forEach(function (x) { x.disabled = false; }); });
+          .catch(function (e2) { err.textContent = e2.message; err.hidden = false; list.querySelectorAll('.account').forEach(function (x) { x.disabled = false; }); b.classList.remove('busy'); });
       };
     });
   }).catch(function () {});
+
   f.addEventListener('submit', function (e) {
     e.preventDefault();
     err.hidden = true;

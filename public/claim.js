@@ -32,6 +32,15 @@ AP.boot({
 
     function render(d) {
       var c = d.claim;
+      // Details for "Contact Opus" from this page.
+      AP.setSupportContext(function () {
+        var s = d.support || {};
+        var failedStep = (d.steps || []).find(function (x) { return x.state === 'failed'; });
+        return { caseId: c.id, reference: c.claimReference || c.title, status: AP.statusLabel(c.status), reason: c.error || null,
+          failed: ['failed', 'cancelled', 'timed_out'].indexOf(c.status) >= 0, failedAt: failedStep ? failedStep.label : null,
+          reviewExecutionId: s.reviewExecutionId, reviewType: d.review ? d.review.kindLabel : null,
+          submittedAt: s.submittedAt, submittedBy: s.submittedBy, finishedAt: s.finishedAt, workflowVersion: s.workflowVersion };
+      });
       document.title = (c.claimReference || c.title) + ' · ' + AP.APP_NAME;
       var fnol = out(d, 'Extract FNOL Details'), sched = out(d, 'Extract Policy Schedule'), ev = out(d, 'Preserve Claim Evidence'),
           val = out(d, 'Validate Policy'), tri = out(d, 'Triage Claim'), interp = out(d, 'Interpret Policy Clauses'),
@@ -152,10 +161,10 @@ AP.boot({
       if (has(val) || has(sched)) {
         var v = val || {}, sc = sched || {};
         left.push('<section class="card"><div class="card-head"><h2>Policy check</h2>' + (v.policy_validity_status ? '<span class="pill plain ' + (/valid|ok|pass/i.test(v.policy_validity_status) && !/invalid/i.test(v.policy_validity_status) ? 'ok' : 'warn') + '">' + E(AP.decisionText(v.policy_validity_status)) + '</span>' : '') + '</div><div class="card-body stack">' +
-          (has(val) ? '<div class="grid-2">' + AP.kv([
-            ['Cover in force', yesNo(v.cover_in_force, true), true], ['Insured matches', yesNo(v.insured_matches, true), true],
-            ['Risk address matches', yesNo(v.risk_address_matches, true), true]]) + AP.kv([
-            ['Premium paid', yesNo(v.premium_paid, true), true], ['Late notification', yesNo(v.late_notification, false), true]]) + '</div>' +
+          (has(val) ? '<div class="check-grid">' + [
+            ['Cover in force', yesNo(v.cover_in_force, true)], ['Insured matches', yesNo(v.insured_matches, true)],
+            ['Risk address matches', yesNo(v.risk_address_matches, true)], ['Premium paid', yesNo(v.premium_paid, true)],
+            ['Late notification', yesNo(v.late_notification, false)]].map(function (x) { return '<div class="check-item"><span>' + E(x[0]) + '</span>' + x[1] + '</div>'; }).join('') + '</div>' +
             (v.policy_validity_reasons && v.policy_validity_reasons.length ? '<div><h3 style="margin-bottom:6px">Reasons</h3>' + R(v.policy_validity_reasons) + '</div>' : '') : '') +
           (has(sched) ? '<div><h3 style="margin-bottom:8px">Policy schedule</h3>' + AP.kv([
             ['Policy number', sc.policy_number], ['Named insureds', sc.named_insureds], ['Risk address', sc.risk_address],

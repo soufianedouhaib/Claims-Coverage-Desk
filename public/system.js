@@ -14,7 +14,7 @@ AP.boot({
           '<div class="grid-2" style="margin-bottom:16px">' +
           '<section class="card"><div class="card-head"><h2>Review steps webhook</h2></div><div class="card-body stack">' +
           '<p class="small muted" style="margin:0">In the workflow builder, connect each handler review step off-platform with its own URL below, replacing &lt;secret&gt; with the value of REVIEW_WEBHOOK_SECRET. No custom header is needed.</p>' +
-          '<div class="note-box small mono wrap-any">Detailed review: ' + E(s.reviewWebhook.url) + '/detailed/&lt;secret&gt;<br>Quick sign-off: ' + E(s.reviewWebhook.url) + '/quick/&lt;secret&gt;</div>' +
+          '<div class="note-box small mono">Detailed review: ' + E(s.reviewWebhook.url).replace(/\//g, '/<wbr>') + '/<wbr>detailed/<wbr>&lt;secret&gt;<br>Quick sign-off: ' + E(s.reviewWebhook.url).replace(/\//g, '/<wbr>') + '/<wbr>quick/<wbr>&lt;secret&gt;</div>' +
           AP.kv([
             ['Webhook URL', '<code class="wrap-any" style="display:block;margin-bottom:6px">' + E(s.reviewWebhook.url) + '</code><button class="btn small" type="button" id="cpUrl">Copy</button>', true],
             ['Header name', '<code>' + E(s.reviewWebhook.header) + '</code>', true],

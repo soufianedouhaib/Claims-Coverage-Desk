@@ -6,7 +6,9 @@ AP.boot({
     var status = AP.qs('status') || 'all';
     if (!FILTERS.some(function (f) { return f[0] === status; })) status = 'all';
     main.innerHTML =
-      '<div class="page-head"><div><h1>Claims</h1><div class="sub">Every claim submitted for coverage assessment.</div></div><div class="actions">' +
+      '<div class="page-head"><div><h1>' + (AP.can(me, 'view_all') ? 'All claims' : me.role === 'intake' ? 'My claims' : 'My claims to review') + '</h1><div class="sub">' +
+      (AP.can(me, 'view_all') ? 'Every claim submitted for coverage assessment.' : me.role === 'intake' ? 'The claims you submitted for coverage assessment.' :
+        AP.can(me, 'review_quick') ? 'Claims the assessment routed to quick sign-off.' : 'Claims the assessment routed to detailed review.') + '</div></div><div class="actions">' +
       (AP.can(me, 'export') ? '<a class="btn" href="/api/claims.csv">Export CSV</a>' : '') +
       (AP.can(me, 'submit') ? '<a class="btn primary" href="/new-claim.html">New claim</a>' : '') + '</div></div>' +
       '<div class="card"><div class="card-head"><div class="toolbar" style="flex:1">' +

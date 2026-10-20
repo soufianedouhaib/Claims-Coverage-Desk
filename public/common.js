@@ -180,48 +180,81 @@
     return { el: back, close: close };
   }
 
-  // ---------- chrome ----------
+  // ---------- chrome: icon rail that expands on hover ----------
+  // A narrow rail is always visible. Hovering (or keyboard focus) expands it over the page and
+  // blurs what is behind; moving away shrinks it again. On phones it is a drawer behind the menu button.
+  function svg(d) { return '<svg class="side-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>'; }
   var ICONS = {
-    dash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>',
-    plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>',
-    list: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="3.5" cy="6" r="1"/><circle cx="3.5" cy="12" r="1"/><circle cx="3.5" cy="18" r="1"/></svg>',
-    check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3 8-8"/><path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9"/></svg>',
-    users: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.8c1.8.6 3 2.3 3.5 5.2"/></svg>',
-    menu: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>'
+    dash: svg('<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>'),
+    plus: svg('<path d="M12 16V4m0 0L8 8m4-4 4 4M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/>'),
+    list: svg('<path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/>'),
+    check: svg('<path d="M9 11l3 3 8-8"/><path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9"/>'),
+    chart: svg('<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'),
+    users: svg('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.8c1.8.6 3 2.3 3.5 5.2"/>'),
+    theme: svg('<circle cx="12" cy="12" r="8"/><path d="M12 4v16a8 8 0 0 0 0-16z" fill="currentColor"/>'),
+    support: svg('<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.5v.4M12 17h.01"/>'),
+    account: svg('<circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/>'),
+    signout: svg('<path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 16l-4-4 4-4M6 12h10"/>'),
+    menu: svg('<path d="M4 7h16M4 12h16M4 17h16"/>')
   };
-  var LOGO = '<svg width="30" height="30" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#2f6fd6"/><path d="M16 6l8 3v6.2c0 5-3.4 9.2-8 10.8-4.6-1.6-8-5.8-8-10.8V9l8-3z" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round"/><path d="M12.3 15.8l2.6 2.6 4.8-5" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  var LOGO = '<svg width="30" height="30" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#ffffff" fill-opacity=".16"/><path d="M16 6l8 3v6.2c0 5-3.4 9.2-8 10.8-4.6-1.6-8-5.8-8-10.8V9l8-3z" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round"/><path d="M12.3 15.8l2.6 2.6 4.8-5" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
   function can(me, p) { return me && me.can && me.can.indexOf(p) >= 0; }
 
   function shell(me, active) {
-    var nav = [];
-    nav.push(['dashboard', '/dashboard.html', 'Dashboard', ICONS.dash]);
-    if (can(me, 'submit')) nav.push(['new', '/new-claim.html', 'New claim', ICONS.plus]);
-    nav.push(['claims', '/claims.html', 'Claims', ICONS.list]);
-    if (can(me, 'review_quick') || can(me, 'review_detailed')) nav.push(['reviews', '/reviews.html', 'Reviews', ICONS.check, 'reviewBadge']);
-    if (can(me, 'users')) nav.push(['users', '/users.html', 'Users', ICONS.users]);
-    var navHtml = nav.map(function (n) {
-      return '<a href="' + n[1] + '"' + (n[0] === active ? ' class="active" aria-current="page"' : '') + '>' + n[3] + '<span>' + n[2] + '</span>' + (n[4] ? '<span class="badge" id="' + n[4] + '" hidden></span>' : '') + '</a>';
+    var groups = [
+      { title: 'Claims', links: [
+        ['dashboard', '/dashboard.html', 'Dashboard', ICONS.dash],
+        can(me, 'submit') ? ['new', '/new-claim.html', 'New claim', ICONS.plus] : null,
+        ['claims', '/claims.html', can(me, 'view_all') ? 'All claims' : me.role === 'intake' ? 'My claims' : 'My claims to review', ICONS.list]
+      ] },
+      (can(me, 'review_quick') || can(me, 'review_detailed')) ? { title: 'Reviews', links: [
+        ['reviews', '/reviews.html', can(me, 'review_quick') && can(me, 'review_detailed') ? 'Review queues' : can(me, 'review_quick') ? 'Quick sign-offs' : 'Detailed reviews', ICONS.check, 'reviewBadge']
+      ] } : null,
+      can(me, 'reports') ? { title: 'Insights', links: [['reports', '/reports.html', 'Reports', ICONS.chart]] } : null,
+      can(me, 'users') ? { title: 'Administration', links: [['users', '/users.html', 'Users', ICONS.users]] } : null
+    ].filter(Boolean);
+    var navHtml = groups.map(function (g) {
+      return '<div class="side-group"><div class="side-heading">' + esc(g.title) + '</div>' + g.links.filter(Boolean).map(function (n) {
+        return '<a class="side-link' + (n[0] === active ? ' is-current' : '') + '" href="' + n[1] + '" title="' + esc(n[2]) + '"' + (n[0] === active ? ' aria-current="page"' : '') + '>' +
+          n[3] + '<span class="side-label">' + esc(n[2]) + '</span>' + (n[4] ? '<span class="side-badge" id="' + n[4] + '" hidden></span>' : '') + '</a>';
+      }).join('') + '</div>';
     }).join('');
+    var initials = String(me.name || '?').split(/\s+/).map(function (w) { return w.charAt(0); }).join('').slice(0, 2).toUpperCase();
     var app = document.getElementById('app');
     var content = app.innerHTML;
     app.innerHTML =
-      '<div class="topbar"><button type="button" id="navToggle" aria-label="Open menu">' + ICONS.menu + '</button>' + LOGO + '<span>' + APP_NAME + '</span></div>' +
-      '<div class="shell"><aside class="side" aria-label="Main menu">' +
-      '<div class="brand">' + LOGO + '<div>' + APP_NAME + '<small>Coverage assessment</small></div></div>' +
-      '<nav class="nav">' + navHtml + '</nav>' +
-      '<div class="side-foot"><div class="who" title="' + esc(me.email) + '">' + esc(me.name) + '</div><div class="role">' + esc(me.roleLabel) + '</div>' +
-      '<div class="links"><a href="/account.html">Account</a><button type="button" class="linkish" id="themeBtn">Theme</button><button type="button" class="linkish" id="signOut">Sign out</button></div></div>' +
-      '</aside><main class="main" id="main">' + content + '</main></div>';
+      '<div class="topbar"><button type="button" class="side-btn" id="navToggle" aria-label="Open menu" aria-expanded="false">' + ICONS.menu + '</button>' + LOGO + '<span>' + APP_NAME + '</span></div>' +
+      '<aside class="side" id="side" aria-label="Main menu">' +
+        '<div class="side-top">' + LOGO + '<div class="side-brand"><strong>' + APP_NAME + '</strong><small>Coverage assessment</small></div></div>' +
+        '<nav class="side-nav">' + navHtml + '</nav>' +
+        '<div class="side-foot">' +
+          '<button type="button" class="side-link side-action" id="themeBtn" title="Light / dark">' + ICONS.theme + '<span class="side-label">Light / dark</span></button>' +
+          '<button type="button" class="side-link side-action" id="supportBtn" title="Contact Opus">' + ICONS.support + '<span class="side-label">Contact Opus</span></button>' +
+          '<a class="side-link side-action' + (active === 'account' ? ' is-current' : '') + '" href="/account.html" title="Account">' + ICONS.account + '<span class="side-label">Account</span></a>' +
+          '<div class="side-user" title="' + esc(me.email) + '"><span class="avatar">' + esc(initials) + '</span><span class="side-label"><strong>' + esc(me.name) + '</strong><small>' + esc(me.roleLabel) + '</small></span></div>' +
+          '<button type="button" class="side-link side-action danger" id="signOut" title="Sign out">' + ICONS.signout + '<span class="side-label">Sign out</span></button>' +
+        '</div>' +
+      '</aside>' +
+      '<div class="side-scrim" id="sideScrim"></div>' +
+      '<main class="main" id="main">' + content + '</main>';
     app.hidden = false;
+    document.body.classList.add('has-rail');
     document.getElementById('signOut').onclick = function () {
       api('POST', '/api/auth/logout').finally(function () { location.href = '/'; });
     };
-    document.getElementById('themeBtn').onclick = cycleTheme;
-    document.getElementById('navToggle').onclick = function () { document.body.classList.toggle('nav-open'); };
-    document.addEventListener('click', function (e) {
-      if (document.body.classList.contains('nav-open') && !e.target.closest('.side') && !e.target.closest('#navToggle')) document.body.classList.remove('nav-open');
-    });
+    var side = document.getElementById('side');
+    function suppressRail() { if (document.activeElement && side.contains(document.activeElement)) document.activeElement.blur(); document.body.classList.add('rail-suppress'); }
+    side.addEventListener('mouseleave', function () { document.body.classList.remove('rail-suppress'); });
+    document.getElementById('themeBtn').onclick = function () { cycleTheme(); };
+    document.getElementById('supportBtn').onclick = function () { suppressRail(); setDrawer(false); openSupport(me); };
+    function setDrawer(open) {
+      document.body.classList.toggle('nav-open', open);
+      document.getElementById('navToggle').setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+    document.getElementById('navToggle').onclick = function () { setDrawer(!document.body.classList.contains('nav-open')); };
+    document.getElementById('sideScrim').onclick = function () { setDrawer(false); };
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') setDrawer(false); });
     if (can(me, 'review_quick') || can(me, 'review_detailed')) refreshBadge();
   }
 
@@ -240,13 +273,135 @@
     else document.documentElement.removeAttribute('data-theme');
   }
   function cycleTheme() {
-    var cur = document.documentElement.getAttribute('data-theme');
-    var next = cur === 'dark' ? 'light' : cur === 'light' ? 'system' : 'dark';
-    try { if (next === 'system') localStorage.removeItem('ccd-theme'); else localStorage.setItem('ccd-theme', next); } catch (e) {}
+    var dark = document.documentElement.getAttribute('data-theme') === 'dark' ||
+      (!document.documentElement.getAttribute('data-theme') && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
+    var next = dark ? 'light' : 'dark';
+    try { localStorage.setItem('ccd-theme', next); } catch (e) {}
     applyTheme();
-    toast('Theme: ' + (next === 'system' ? 'match device' : next));
+    toast(next === 'dark' ? 'Dark theme' : 'Light theme');
   }
   applyTheme();
+
+  // ---------- Contact Opus ----------
+  // Writes the email to Opus support with everything they need (workflow, org, workspace and
+  // case ids, status, where it stopped), and offers a screenshot of the page to attach,
+  // because a mailto link cannot attach files. A page may add its own details with setSupportContext.
+  var supportContext = null;
+  function setSupportContext(fn) { supportContext = fn; }
+  function getSupportInfo(me) {
+    if (me && me.support) return Promise.resolve(me.support);
+    return fetch('/api/support-info').then(function (r) { return r.json(); }).catch(function () { return { email: 'support@opus.com', product: APP_NAME }; });
+  }
+  function line(label, value) { return value ? label + ': ' + value : null; }
+  function supportEmail(me, info, d, shotName) {
+    var subject = APP_NAME + (d.caseId ? ' – case ' + d.caseId : '') +
+      (d.failed ? ' did not finish' + (d.failedAt ? ' at ' + d.failedAt : '') : d.status ? ' (' + String(d.status).toLowerCase().replace(/_/g, ' ') + ')' : ', question');
+    var parts = [
+      'Hello Opus support team,', '',
+      d.reason ? 'What went wrong: ' + d.reason : 'Describe the issue here:',
+      d.failedAt ? 'Stopped at step: ' + d.failedAt : null,
+      '',
+      line('Product', info.product || APP_NAME),
+      line('Workflow ID', info.workflowId ? info.workflowId + (d.workflowVersion ? ' (version ' + d.workflowVersion + ')' : '') : null),
+      'Org ID: ' + (info.orgId || 'not set'),
+      line('Workspace ID', info.workspaceId),
+      line('Case ID', d.caseId ? d.caseId + (d.reference ? ' (claim ' + d.reference + ')' : '') : null),
+      line('Review execution ID', d.reviewExecutionId),
+      line('Review type', d.reviewType),
+      line('Status', d.status),
+      line('Submitted', d.submittedAt ? new Date(d.submittedAt).toISOString() + (d.submittedBy ? ' by ' + d.submittedBy : '') : null),
+      line('Finished', d.finishedAt ? new Date(d.finishedAt).toISOString() : null),
+      '',
+      'Reported by: ' + (me ? me.name + ' <' + me.email + '> (' + me.roleLabel + ')' : 'not signed in'),
+      'Page: ' + location.href,
+      'When: ' + new Date().toISOString(),
+      'Browser: ' + navigator.userAgent,
+      shotName ? 'Screenshot: attached (' + shotName + ')' : 'Screenshot: please see attachment'
+    ].filter(function (x) { return x !== null; });
+    var body = parts.join('\n');
+    if (body.length > 1800) body = body.slice(0, 1790) + '\n…';
+    return 'mailto:' + (info.email || 'support@opus.com') + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
+  }
+  function loadScript(src) {
+    return new Promise(function (resolve, reject) {
+      if (window.html2canvas) return resolve();
+      var sc = document.createElement('script');
+      sc.src = src; sc.onload = resolve; sc.onerror = function () { reject(new Error('The screenshot tool could not load.')); };
+      document.head.appendChild(sc);
+    });
+  }
+  function takeScreenshot(name) {
+    document.body.classList.remove('nav-open');
+    return loadScript('/vendor/html2canvas.min.js').then(function () {
+      return window.html2canvas(document.body, {
+        scale: Math.min(2, window.devicePixelRatio || 1),
+        backgroundColor: getComputedStyle(document.body).backgroundColor,
+        ignoreElements: function (el) { return el.id === 'support-modal' || el.classList.contains('side-scrim') || el.classList.contains('toast'); },
+        windowWidth: document.documentElement.clientWidth
+      });
+    }).then(function (canvas) {
+      return new Promise(function (resolve) {
+        canvas.toBlob(function (blob) {
+          var a = document.createElement('a');
+          a.href = URL.createObjectURL(blob); a.download = name;
+          document.body.appendChild(a); a.click();
+          setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+          resolve();
+        }, 'image/png');
+      });
+    });
+  }
+  function openSupport(me) {
+    var old = document.getElementById('support-modal'); if (old) old.remove();
+    var back = document.createElement('div');
+    back.className = 'modal-back'; back.id = 'support-modal';
+    back.innerHTML = '<div class="modal support-modal" role="dialog" aria-modal="true" aria-labelledby="support-title">' +
+      '<div class="card-head"><h2 id="support-title">Contact Opus</h2><button type="button" class="btn small" id="support-x" aria-label="Close">Close</button></div>' +
+      '<div class="card-body"><p class="muted small" style="margin:0 0 14px">The email to Opus support is written for you, with the technical details they need. A mail link cannot attach files, so download the screenshot first and attach it to the email.</p>' +
+      '<dl class="kv" id="support-details"><dt>Details</dt><dd>Gathering…</dd></dl>' +
+      '<div class="alert bad" id="support-error" hidden style="margin-top:12px"></div>' +
+      '<div class="support-steps">' +
+        '<button type="button" class="btn" id="support-shot"><span class="step-n">1</span>Download screenshot</button>' +
+        '<a class="btn primary" id="support-mail" href="#"><span class="step-n">2</span>Open email</a>' +
+      '</div>' +
+      '<div class="support-foot"><button type="button" class="btn small" id="support-copy">Copy details</button><span class="small muted" id="support-to"></span></div></div>' +
+      '</div>';
+    document.body.appendChild(back);
+    function close() { back.remove(); document.removeEventListener('keydown', onKey); }
+    function onKey(e) { if (e.key === 'Escape') close(); }
+    document.addEventListener('keydown', onKey);
+    back.addEventListener('click', function (e) { if (e.target === back) close(); });
+    document.getElementById('support-x').onclick = close;
+    var stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
+    var mail = document.getElementById('support-mail');
+    var info = { email: 'support@opus.com' }, details = {}, shotName = 'claims-desk-' + stamp + '.png';
+    function render() {
+      shotName = 'claims-desk-' + (details.caseId ? 'case-' + details.caseId + '-' : '') + stamp + '.png';
+      var rows = [['What went wrong', details.reason], ['Stopped at', details.failedAt], ['Claim', details.reference], ['Case', details.caseId], ['Status', details.status]]
+        .filter(function (r) { return r[1]; });
+      if (!rows.length) rows.push(['Details', 'Describe the problem in the email. The workflow, org and workspace IDs and your details are added for you.']);
+      document.getElementById('support-details').innerHTML = rows.map(function (r) { return '<dt>' + esc(r[0]) + '</dt><dd' + (r[0] === 'Case' ? ' class="mono"' : '') + '>' + esc(r[1]) + '</dd>'; }).join('');
+      mail.href = supportEmail(me, info, details, shotName);
+      document.getElementById('support-to').textContent = 'To: ' + (info.email || 'support@opus.com');
+    }
+    render();
+    getSupportInfo(me).then(function (i) { info = i || info; render(); });
+    (supportContext ? Promise.resolve(supportContext()) : Promise.resolve(null)).then(function (d) { if (d) { details = d; render(); } }, function () {});
+    document.getElementById('support-shot').onclick = function () {
+      var b = this, label = b.innerHTML;
+      b.disabled = true; b.textContent = 'Capturing…';
+      takeScreenshot(shotName).then(function () {
+        b.innerHTML = '<span class="step-n">✓</span>Screenshot saved'; b.disabled = false;
+      }, function (err) {
+        b.innerHTML = label; b.disabled = false;
+        var x = document.getElementById('support-error'); x.textContent = err.message + ' Use your own screenshot tool instead.'; x.hidden = false;
+      });
+    };
+    document.getElementById('support-copy').onclick = function () {
+      var text = decodeURIComponent(mail.href.split('&body=')[1] || ''), b = this;
+      (navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject()).then(function () { b.textContent = 'Copied'; }, function () { b.textContent = 'Copy failed'; });
+    };
+  }
 
   // Every page: ask who is signed in before rendering anything.
   function boot(opts) {
@@ -254,6 +409,7 @@
       var ok = !opts.perm || [].concat(opts.perm).some(function (p) { return can(me, p); });
       if (!ok) { location.replace('/dashboard.html'); return; }
       document.title = (opts.title ? opts.title + ' · ' : '') + APP_NAME;
+      AP.me = me;
       shell(me, opts.nav);
       opts.render(me, document.getElementById('main'));
     }).catch(function (e) {
@@ -283,6 +439,7 @@
     APP_NAME: APP_NAME, esc: esc, api: api, boot: boot, qs: qs, can: can,
     fmtDate: fmtDate, fmtRel: fmtRel, fmtNum: fmtNum, fmtPct: fmtPct, humanize: humanize,
     casePill: casePill, statusLabel: statusLabel, decisionPill: decisionPill, decisionText: decisionText, decisionClass: decisionClass,
-    reviewStatusPill: reviewStatusPill, renderValue: renderValue, kv: kv, toast: toast, modal: modal, refreshBadge: refreshBadge, LOGO: LOGO
+    reviewStatusPill: reviewStatusPill, renderValue: renderValue, kv: kv, toast: toast, modal: modal, refreshBadge: refreshBadge, LOGO: LOGO,
+    openSupport: openSupport, setSupportContext: setSupportContext, cycleTheme: cycleTheme, ICONS: ICONS
   };
 })();

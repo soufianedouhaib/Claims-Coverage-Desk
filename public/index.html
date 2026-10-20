@@ -5,31 +5,37 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Sign in · Claims Coverage Desk</title>
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/styles.css?v=8">
+<link rel="stylesheet" href="/styles.css?v=10">
 </head>
-<body>
+<body class="signin-page">
+<button type="button" class="btn small signin-support" id="supportBtn">Contact Opus</button>
 <div class="signin-wrap">
   <div class="signin">
-    <div class="brand-lg">
-      <svg width="40" height="40" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#2f6fd6"/><path d="M16 6l8 3v6.2c0 5-3.4 9.2-8 10.8-4.6-1.6-8-5.8-8-10.8V9l8-3z" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round"/><path d="M12.3 15.8l2.6 2.6 4.8-5" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      <div>Claims Coverage Desk<small>Home and contents coverage assessment</small></div>
-    </div>
-    <form class="card card-pad form-grid" id="f" novalidate>
+    <section class="card signin-card">
+      <div class="brand-lg">
+        <svg width="40" height="40" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#1d4e8f"/><path d="M16 6l8 3v6.2c0 5-3.4 9.2-8 10.8-4.6-1.6-8-5.8-8-10.8V9l8-3z" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round"/><path d="M12.3 15.8l2.6 2.6 4.8-5" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <div>Claims Coverage Desk<small>Home and contents coverage assessment</small></div>
+      </div>
       <h1>Sign in</h1>
-      <div class="alert bad" id="err" role="alert" hidden></div>
-      <label class="field">Email<input type="email" id="email" autocomplete="username" required></label>
-      <label class="field">Password<input type="password" id="pw" autocomplete="current-password" required></label>
-      <button class="btn primary" type="submit" id="go">Sign in</button>
-      <p class="small muted" style="margin:0">Accounts are created by your administrator. Ask them if you need access or a new password.</p>
-    </form>
-    <section class="card card-pad demo-box" id="demo" hidden aria-labelledby="demoTitle">
-      <h2 id="demoTitle">Demo accounts</h2>
-      <p class="small muted" style="margin:4px 0 12px">Sign in with one click to try each role.</p>
-      <div class="demo-list" id="demoList"></div>
+      <p class="lead">Submit claims, follow the coverage assessment, and complete the handler reviews.</p>
+
+      <div id="demo" hidden>
+        <p class="small muted" style="margin:0 0 10px">Choose your account.</p>
+        <div class="account-list" id="demoList"></div>
+        <div class="or"><span>or sign in with your email</span></div>
+      </div>
+
+      <form class="form-grid" id="f" novalidate>
+        <div class="alert bad" id="err" role="alert" hidden></div>
+        <label class="field">Work email<input type="email" id="email" autocomplete="username" required></label>
+        <label class="field">Password<input type="password" id="pw" autocomplete="current-password" required></label>
+        <button class="btn primary block" type="submit" id="go">Sign in</button>
+      </form>
     </section>
+    <p class="small muted signin-foot">Accounts are managed by your administrator. Need help? <button type="button" class="linkbtn" id="supportLink">Contact Opus</button></p>
   </div>
 </div>
-<script src="/common.js?v=8"></script>
-<script src="/login.js?v=8"></script>
+<script src="/common.js?v=10"></script>
+<script src="/login.js?v=10"></script>
 </body>
 </html>

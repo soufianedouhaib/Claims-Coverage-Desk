@@ -4,9 +4,9 @@ AP.boot({
     var E = AP.esc;
     var ROLE_HELP = {
       admin: 'Everything, including users and claim clean-up',
-      intake: 'Submits claims and follows their progress',
-      handler: 'Completes quick sign-offs',
-      senior: 'Completes detailed reviews and quick sign-offs, exports'
+      intake: 'Submits claims and sees the claims they submitted',
+      handler: 'Quick sign-offs: sees only claims routed to quick sign-off',
+      senior: 'Detailed reviews: sees only claims routed to detailed review'
     };
     var roles = [];
     main.innerHTML =
@@ -24,11 +24,12 @@ AP.boot({
           return '<div class="card kpi"><div class="label">' + E(r.label) + '</div><div class="value">' + n + '</div><div class="small muted">' + E(ROLE_HELP[r.id] || '') + '</div></div>';
         }).join('');
         var el = document.getElementById('list');
-        el.innerHTML = '<div class="table-wrap"><table class="data cards"><thead><tr><th>Name</th><th>Role</th><th>Status</th><th>Last sign-in</th><th></th></tr></thead><tbody>' +
+        el.innerHTML = '<div class="table-wrap"><table class="data cards"><thead><tr><th>Name</th><th>Role</th><th>Status</th><th>Sign-in page</th><th>Last sign-in</th><th></th></tr></thead><tbody>' +
           j.users.map(function (u) {
             return '<tr><td data-label="Name"><div class="primary-cell">' + E(u.name) + (u.email === me.email ? ' <span class="small muted">(you)</span>' : '') + (u.demo ? ' <span class="pill plain info">Demo</span>' : '') + '</div><div class="sub wrap-any">' + E(u.email) + '</div></td>' +
               '<td data-label="Role">' + E(u.roleLabel) + '</td>' +
               '<td data-label="Status">' + (u.active ? '<span class="pill ok">Active</span>' : '<span class="pill">Deactivated</span>') + '</td>' +
+              '<td data-label="Sign-in page">' + (u.quickSignIn ? '<span class="pill plain info">One-click</span>' : '<span class="muted small">Password only</span>') + '</td>' +
               '<td data-label="Last sign-in" class="nowrap">' + (u.lastLoginAt ? AP.fmtRel(u.lastLoginAt) : '<span class="muted">Never</span>') + '</td>' +
               '<td class="right nowrap"><button class="btn small" type="button" data-edit="' + E(u.email) + '">Edit</button>' +
               (u.email === me.email ? '' : ' <button class="btn small danger" type="button" data-del="' + E(u.email) + '">Delete</button>') + '</td></tr>';
@@ -44,12 +45,14 @@ AP.boot({
 
     function add() {
       AP.modal('Add user', '<div class="form-grid"><label class="field">Name<input type="text" id="u-name"></label><label class="field">Email<input type="email" id="u-email"></label>' +
-        '<label class="field">Role' + roleSelect('intake') + '</label><label class="field">Temporary password<span class="hint">At least 10 characters. Share it privately; they can change it under Account.</span><input type="text" id="u-pw" autocomplete="off"></label>' +
+        '<label class="field">Role' + roleSelect('intake') + '</label>' +
+        '<label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="u-quick" checked> Show on the sign-in page (one-click sign-in)</label>' +
+        '<label class="field">Password<span class="hint">Optional with one-click sign-in. At least 10 characters; they can change it under Account.</span><input type="text" id="u-pw" autocomplete="off"></label>' +
         '<div class="alert bad" id="u-err" hidden></div></div>', [
         { label: 'Cancel' },
         { label: 'Add user', primary: true, onClick: function (back, close) {
           var err = back.querySelector('#u-err');
-          AP.api('POST', '/api/users', { name: back.querySelector('#u-name').value, email: back.querySelector('#u-email').value, role: back.querySelector('#u-role').value, password: back.querySelector('#u-pw').value })
+          AP.api('POST', '/api/users', { name: back.querySelector('#u-name').value, email: back.querySelector('#u-email').value, role: back.querySelector('#u-role').value, password: back.querySelector('#u-pw').value, quickSignIn: back.querySelector('#u-quick').checked })
             .then(function () { close(); AP.toast('User added'); load(); })
             .catch(function (e) { err.textContent = e.message; err.hidden = false; });
           return false;
@@ -62,6 +65,7 @@ AP.boot({
       AP.modal('Edit ' + u.name, '<div class="form-grid"><div class="small muted wrap-any">' + E(u.email) + '</div><label class="field">Name<input type="text" id="u-name" value="' + E(u.name) + '"></label>' +
         '<label class="field">Role' + roleSelect(u.role) + (self ? '<span class="hint">You cannot remove your own administrator role.</span>' : '') + '</label>' +
         '<label class="field">New password<span class="hint">Leave empty to keep the current one. Changing it signs them out.</span><input type="text" id="u-pw" autocomplete="off"></label>' +
+        '<label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="u-quick"' + (u.quickSignIn ? ' checked' : '') + '> Show on the sign-in page (one-click sign-in)</label>' +
         (self ? '<div class="small muted">You cannot delete or deactivate your own account.</div>' : '<label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="u-active"' + (u.active ? ' checked' : '') + '> Active (can sign in)</label>') +
         '<div class="alert bad" id="u-err" hidden></div></div>', [
         { label: 'Cancel' },
@@ -69,6 +73,7 @@ AP.boot({
           var b = { name: back.querySelector('#u-name').value, role: back.querySelector('#u-role').value };
           var pw = back.querySelector('#u-pw').value; if (pw) b.password = pw;
           var act = back.querySelector('#u-active'); if (act) b.active = act.checked;
+          b.quickSignIn = back.querySelector('#u-quick').checked;
           AP.api('PATCH', '/api/users/' + encodeURIComponent(u.email), b)
             .then(function () { close(); AP.toast('Saved'); load(); })
             .catch(function (e) { var err = back.querySelector('#u-err'); err.textContent = e.message; err.hidden = false; });

@@ -29,6 +29,9 @@ AP.boot({
       var conf = pick(d, 'coverage_confidence_score');
       var settle = pick(d, 'recommended_settlement_amount_after_excess');
       var claim = d.claim;
+      AP.setSupportContext(function () {
+        return { caseId: r.claimId, reference: r.claimReference, status: 'Review ' + r.status, reviewType: r.kindLabel, reason: r.lastError || null };
+      });
       document.title = r.kindLabel + ' · ' + (r.claimReference || 'Claim') + ' · ' + AP.APP_NAME;
 
       var head = '<div class="page-head"><div><div class="crumb"><a href="/reviews.html?kind=' + kind + '">Reviews</a> / ' + E(r.kindLabel) + '</div>' +
