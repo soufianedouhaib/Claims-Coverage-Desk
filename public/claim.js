@@ -61,7 +61,10 @@ AP.boot({
           '<div><div class="small muted">Expected review</div>' + AP.routeChip(smp.route) + '</div><div>' + routeTxt + '</div></div>' +
           '<p class="small muted" style="margin:10px 0 0">' + E(smp.why) + '</p></section>');
       }
-      if (c.error && ['failed', 'cancelled', 'timed_out'].indexOf(c.status) >= 0) left.push('<div class="alert bad">' + E(c.error) + '</div>');
+      if (c.error && ['failed', 'cancelled', 'timed_out'].indexOf(c.status) >= 0) {
+        left.push('<div class="alert bad">' + E(c.error) + (c.sampleId ? ' <a href="/new-claim.html#samples">Run the sample again</a>' : '') + '</div>');
+        if (d.failureDetail) left.push('<section class="card"><details class="more" style="border-top:0"><summary>Technical details (administrators only)</summary><div class="inner"><div class="note-box pre mono small">' + E(d.failureDetail) + '</div></div></details></section>');
+      }
 
       // Review banner
       if (d.review && d.review.status === 'pending') {

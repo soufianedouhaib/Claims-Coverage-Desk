@@ -18,7 +18,8 @@ AP.boot({
             ['Webhook URL', '<code class="wrap-any" style="display:block;margin-bottom:6px">' + E(s.reviewWebhook.url) + '</code><button class="btn small" type="button" id="cpUrl">Copy</button>', true],
             ['Header name', '<code>' + E(s.reviewWebhook.header) + '</code>', true],
             ['Header value', yes(s.reviewWebhook.secretSet) + ' <span class="small muted">REVIEW_WEBHOOK_SECRET</span>', true],
-            ['Last review received', s.reviewWebhook.lastReceivedAt ? AP.fmtDate(s.reviewWebhook.lastReceivedAt) : '<span class="muted">Never</span>', true]
+            ['Last review received', s.reviewWebhook.lastReceivedAt ? AP.fmtDate(s.reviewWebhook.lastReceivedAt) : '<span class="muted">Never</span>', true],
+            ['Last delivery attempt', s.reviewWebhook.lastAttempt ? AP.fmtDate(s.reviewWebhook.lastAttempt.at) + ' · <strong>' + E(s.reviewWebhook.lastAttempt.status) + '</strong> ' + E(s.reviewWebhook.lastAttempt.note) + (s.reviewWebhook.lastAttempt.kind ? ' · ' + E(s.reviewWebhook.lastAttempt.kind) : '') : '<span class="muted">None yet</span>', true]
           ]) + '</div></section>' +
           '<section class="card"><div class="card-head"><h2>Connection</h2></div><div class="card-body">' + AP.kv([
             ['Workflow ID', '<code class="wrap-any">' + E(s.workflowId) + '</code>', true],
