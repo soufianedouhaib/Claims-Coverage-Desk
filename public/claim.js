@@ -90,8 +90,20 @@ AP.boot({
         left.push('<section class="card"><div class="card-head"><h2>Coverage position</h2></div><div class="card-body">' + s + '</div>' + aud + '</section>');
       }
 
-      // Handler review outcome
-      if (hd && has(hd)) {
+      // Handler review outcome: the console's own record of the decision comes first (the workflow's
+      // final "handler decision" output does not always carry the reviewer's fields).
+      if (d.review && d.review.status === 'completed') {
+        var rvw = d.review;
+        left.push(section('Handler review', AP.kv([
+          ['Review', rvw.kindLabel],
+          ['Outcome', rvw.outcome],
+          ['Confirmed decision', AP.decisionPill(rvw.confirmedDecision), true],
+          rvw.overrideReason ? ['Override reason', rvw.overrideReason] : null,
+          ['Notes', rvw.notes],
+          ['Reviewed by', rvw.reviewedBy || rvw.completedByName],
+          ['Reviewed at', /^\d{4}-\d{2}-\d{2}$/.test(String(rvw.reviewedAt || '')) ? AP.fmtDate(rvw.reviewedAt + 'T12:00:00', false) : AP.fmtDate(rvw.reviewedAt || rvw.completedAt), true]
+        ])));
+      } else if (hd && has(hd) && (hd.handler_review_outcome || hd.quick_signoff_outcome || hd.handler_notes)) {
         left.push(section('Handler review', AP.kv([
           ['Outcome', hd.handler_review_outcome || hd.quick_signoff_outcome],
           ['Confirmed decision', AP.decisionPill(hd.confirmed_coverage_decision), true],
@@ -100,11 +112,6 @@ AP.boot({
           ['Reviewed by', hd.handler_reviewed_by],
           ['Reviewed at', hd.handler_reviewed_at]
         ])));
-      } else if (d.review && d.review.status === 'completed') {
-        left.push(section('Handler review', AP.kv([
-          ['Review', d.review.kindLabel], ['Outcome', d.review.outcome], ['Confirmed decision', AP.decisionPill(d.review.confirmedDecision), true],
-          ['Reviewed by', d.review.completedByName], ['Reviewed at', d.review.completedAt]
-        ])));
       }
 
       // Coverage assessment
@@ -112,6 +119,7 @@ AP.boot({
         var flags = [['High value', cov.is_high_value_claim], ['Low confidence', cov.is_low_confidence], ['Partially covered', cov.is_partially_covered], ['Not covered', cov.is_not_covered]]
           .filter(function (f) { return f[1] === true; }).map(function (f) { return '<span class="pill plain warn">' + f[0] + '</span>'; }).join(' ');
         left.push('<section class="card"><div class="card-head"><h2>Coverage assessment</h2>' + (cov.requires_detailed_review != null ? '<span class="pill plain ' + (cov.requires_detailed_review ? 'violet' : 'info') + '">' + (cov.requires_detailed_review ? 'Routed to detailed review' : 'Routed to quick sign-off') + '</span>' : '') + '</div><div class="card-body">' +
+          routeWhy(cov, val) +
           '<div class="decision" style="margin-bottom:12px"><div><div class="small muted">Proposed decision</div><div class="big">' + E(AP.decisionText(cov.coverage_decision) || '—') + '</div></div>' +
           '<div class="meter">Confidence <div class="bar"><span style="width:' + confWidth(cov.coverage_confidence_score) + '%"></span></div><strong>' + AP.fmtPct(cov.coverage_confidence_score) + '</strong></div>' + (flags ? '<div>' + flags + '</div>' : '') + '</div>' +
           AP.kv([
@@ -203,6 +211,19 @@ AP.boot({
       };
     }
 
+    // Why the assessment chose this review route, from the flags the workflow sets.
+    function routeWhy(cov, val) {
+      if (cov.requires_detailed_review !== true) return '';
+      var why = [];
+      if (val && val.policy_validity_status && /fail|invalid/i.test(val.policy_validity_status)) why.push('the policy check failed' + (val.policy_validity_reasons && val.policy_validity_reasons.length ? ' (' + val.policy_validity_reasons.filter(function (r) { return !/detailed human review/i.test(r); }).join('; ') + ')' : ''));
+      if (cov.is_low_confidence) why.push('confidence is low (' + AP.fmtPct(cov.coverage_confidence_score) + ')');
+      if (cov.is_high_value_claim) why.push('it is a high-value claim');
+      if (cov.is_not_covered) why.push('the proposed decision is not covered');
+      if (cov.is_partially_covered) why.push('the proposed decision is partial cover');
+      if (/info/i.test(String(cov.coverage_decision || ''))) why.push('more information is required');
+      if (!why.length) return '';
+      return '<div class="alert info" style="margin-bottom:12px"><strong>Why a detailed review:</strong> ' + E(why.join('; ')) + '.</div>';
+    }
     function confWidth(v) { if (v == null || isNaN(Number(v))) return 0; v = Number(v); if (v <= 1) v *= 100; return Math.max(0, Math.min(100, Math.round(v))); }
 
     var SAMPLES = null;
