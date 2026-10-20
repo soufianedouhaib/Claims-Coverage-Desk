@@ -147,6 +147,11 @@ async function allClaims() {
   return out;
 }
 
+// The audit can list every node of the workflow, including ones that have not run (yet, or ever,
+// like the review branch that was not taken). Only these statuses mean a node actually ran.
+const RAN = ['COMPLETED', 'FAILED', 'WAITING', 'STARTED', 'RUNNING', 'IN_PROGRESS'];
+function nodeRan(n) { return !!n && RAN.indexOf(String(n.status || '').toUpperCase()) >= 0; }
+
 function deriveStatus(c, review) {
   const s = c.engineStatus || 'PENDING';
   if (s === 'COMPLETED') return 'completed';
@@ -199,14 +204,15 @@ function stepsFor(c, data, review) {
     let names = Array.isArray(s.node) ? s.node : [s.node];
     if (s.review) names = names.concat(Object.keys(nodes).filter(isReviewNodeName));
     let hit = null, hitName = null;
-    names.forEach(function (n) { if (!hit && byKey[nodeKey(n)]) { hit = byKey[nodeKey(n)]; hitName = n; } });
+    names.forEach(function (n) { const x = byKey[nodeKey(n)]; if (x && (!hit || (!nodeRan(hit) && nodeRan(x)))) { hit = x; hitName = n; } });
     let label = s.label;
     if (s.review) {
-      const kind = (hitName && REVIEW_NODES[hitName]) || c.reviewKind;
+      const kind = (hitName && nodeRan(hit) && REVIEW_NODES[hitName]) || c.reviewKind;
       if (kind) label = REVIEW_KIND[kind].label;
     }
     let st = hit ? String(hit.status || '').toUpperCase() : '';
-    let state = st === 'COMPLETED' ? 'done' : st === 'FAILED' ? 'failed' : st === 'WAITING' ? 'waiting' : st === 'STARTED' || st === 'RUNNING' || st === 'IN_PROGRESS' ? 'running' : st ? 'running' : 'todo';
+    let state = st === 'COMPLETED' ? 'done' : st === 'FAILED' ? 'failed' : st === 'WAITING' ? 'waiting' : st === 'STARTED' || st === 'RUNNING' || st === 'IN_PROGRESS' ? 'running' : 'todo';
+    if (state === 'todo' && hitName && c.progress && nodeKey(c.progress.running) === nodeKey(hitName)) state = 'running';
     if (c.engineStatus === 'COMPLETED' && state !== 'failed') state = 'done';
     return { label: label, state: state, ms: hit && hit.ms || null, review: !!s.review };
   }).map(function (s, i, all) {
@@ -281,10 +287,15 @@ async function refreshClaim(c, force) {
           running: running,
           runningLabel: labelForNode(running)
         };
+        let ranKind = null;
         Object.keys(REVIEW_NODES).forEach(function (n) {
           const k = Object.keys(data.nodes).find(function (x) { return nodeKey(x) === nodeKey(n); });
-          if (k) { c.reviewKind = c.reviewKind || REVIEW_NODES[n]; if (String(data.nodes[k].status).toUpperCase() === 'WAITING') c.waitingKind = REVIEW_NODES[n]; }
+          if (k && nodeRan(data.nodes[k])) { ranKind = REVIEW_NODES[n]; if (String(data.nodes[k].status).toUpperCase() === 'WAITING') c.waitingKind = REVIEW_NODES[n]; }
         });
+        if (REVIEW_NODES[running]) ranKind = REVIEW_NODES[running];
+        // A review that reached the console is the final word; otherwise follow the branch that ran
+        // (this also corrects claims labelled from an audit that listed nodes that never ran).
+        if (!c.reviewId) c.reviewKind = ranKind || null;
         if (REVIEW_NODES[running]) c.waitingKind = REVIEW_NODES[running];
         const failed = (a.failedNodes || []).filter(function (n) { return !/^(input|output)$/i.test(n); });
         if (failed.length && c.engineStatus === 'FAILED') c.error = 'The assessment stopped at: ' + labelForNode(failed[0]) + (failed.length > 1 ? ' (the steps after it did not run)' : '');
