@@ -105,6 +105,7 @@ AP.boot({
             barList(d.outcomes, 'outcome') + table('t3', ['Outcome', 'Reviews'], d.outcomes.map(function (r) { return [r.outcome, r.count]; })) + '</div></section>' +
           '</div>';
         wire(d);
+        AP.animateIn(body, 'reports-' + days);
       }).catch(function (e) { body.innerHTML = '<div class="alert bad">' + E(e.message) + '</div>'; });
     }
 

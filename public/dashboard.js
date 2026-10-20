@@ -38,6 +38,7 @@ AP.boot({
             }).join('') + '</tbody></table></div>'
             : '<div class="empty">No claims yet.' + (AP.can(me, 'submit') ? ' <a href="/new-claim.html">Submit the first one</a>.' : '') + '</div>') +
           '</div>';
+        AP.animateIn(body, 'dashboard');
         body.querySelectorAll('tr.click').forEach(function (tr) { tr.onclick = function () { location.href = '/claim.html?id=' + encodeURIComponent(tr.dataset.id); }; });
       }).catch(function (e) { body.innerHTML = '<div class="alert bad">' + E(e.message) + '</div>'; });
     }

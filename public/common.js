@@ -403,6 +403,60 @@
     };
   }
 
+
+  // Motion for numbers and charts: numbers count up, bars grow, lines draw, cards rise in.
+  // First view animates from zero; later refreshes animate only what changed.
+  var lastValues = {};
+  function reducedMotion() { return window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches; }
+  function countTo(el, key) {
+    var text = el.textContent, nums = text.match(/\d+(?:\.\d+)?/g);
+    if (!nums) return;
+    var prev = lastValues[key], first = prev == null;
+    lastValues[key] = text;
+    if (!first && prev === text) return;
+    var from = first ? nums.map(function () { return 0; }) : ((prev.match(/\d+(?:\.\d+)?/g) || []).map(Number));
+    if (from.length !== nums.length) from = nums.map(function () { return 0; });
+    var parts = text.split(/\d+(?:\.\d+)?/), dec = nums.map(function (n) { return (n.split('.')[1] || '').length; });
+    var to = nums.map(Number), t0 = performance.now(), dur = 900;
+    var ease = function (t) { return 1 - Math.pow(1 - t, 3); };
+    if (el._anim) cancelAnimationFrame(el._anim);
+    (function step(now) {
+      var t = Math.min(1, (now - t0) / dur), e = ease(t), out = parts[0];
+      for (var i = 0; i < to.length; i++) out += (from[i] + (to[i] - from[i]) * e).toFixed(dec[i]) + parts[i + 1];
+      el.textContent = out;
+      if (t < 1) el._anim = requestAnimationFrame(step); else el.textContent = text;
+    })(t0);
+  }
+  function animateIn(root, page) {
+    if (!root) return;
+    var first = !lastValues['__seen_' + page];
+    lastValues['__seen_' + page] = true;
+    var still = reducedMotion();
+    root.querySelectorAll('.kpi .value').forEach(function (el) {
+      var lab = el.parentNode.querySelector('.label');
+      var key = page + '|' + (lab ? lab.textContent : '');
+      if (still) { lastValues[key] = el.textContent; return; }
+      countTo(el, key);
+    });
+    if (still || !first) return;
+    root.querySelectorAll('.card').forEach(function (c, i) { c.style.animationDelay = Math.min(i * 45, 400) + 'ms'; c.classList.add('rise-in'); });
+    root.querySelectorAll('.hbar').forEach(function (b, i) {
+      var w = b.style.width; b.style.transition = 'none'; b.style.width = '0';
+      requestAnimationFrame(function () { requestAnimationFrame(function () {
+        b.style.transition = 'width .7s cubic-bezier(.2,.7,.3,1) ' + (i * 40) + 'ms'; b.style.width = w;
+      }); });
+    });
+    root.querySelectorAll('.hbar-val').forEach(function (v, i) { countTo(v, page + '|bar' + i); });
+    root.querySelectorAll('svg.chart path.ln').forEach(function (p, i) {
+      var len = p.getTotalLength ? p.getTotalLength() : 0; if (!len) return;
+      p.style.strokeDasharray = len; p.style.strokeDashoffset = len;
+      requestAnimationFrame(function () { requestAnimationFrame(function () {
+        p.style.transition = 'stroke-dashoffset 1.1s cubic-bezier(.2,.7,.3,1) ' + (i * 120) + 'ms'; p.style.strokeDashoffset = '0';
+        setTimeout(function () { p.style.strokeDasharray = ''; p.style.strokeDashoffset = ''; p.style.transition = ''; }, 1400 + i * 120);
+      }); });
+    });
+  }
+
   // Every page: ask who is signed in before rendering anything.
   function boot(opts) {
     api('GET', '/api/me').then(function (me) {
@@ -440,6 +494,6 @@
     fmtDate: fmtDate, fmtRel: fmtRel, fmtNum: fmtNum, fmtPct: fmtPct, humanize: humanize,
     casePill: casePill, statusLabel: statusLabel, decisionPill: decisionPill, decisionText: decisionText, decisionClass: decisionClass,
     reviewStatusPill: reviewStatusPill, renderValue: renderValue, kv: kv, toast: toast, modal: modal, refreshBadge: refreshBadge, LOGO: LOGO,
-    openSupport: openSupport, setSupportContext: setSupportContext, cycleTheme: cycleTheme, ICONS: ICONS
+    openSupport: openSupport, setSupportContext: setSupportContext, cycleTheme: cycleTheme, ICONS: ICONS, animateIn: animateIn
   };
 })();
