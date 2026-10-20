@@ -82,8 +82,12 @@ function createMock(opts) {
   async function run(c) {
     const t = c.title.toLowerCase();
     const complex = /complex|flood|theft/.test(t), fail = /fail/.test(t);
-    const ref = 'CLM-' + (2026000 + Math.floor(Math.random() * 9000));
+    // "sameref" in the title: every run shares one claim reference (like re-running a sample),
+    // each with its own confidence score, to test matching reviews to the right run.
+    const same = /sameref/.test(t);
+    const ref = same ? 'CLM-2026-0457813' : 'CLM-' + (2026000 + Math.floor(Math.random() * 9000));
     const D = data(ref, complex);
+    if (same) D.cov.coverage_confidence_score = Number((0.8 + Math.random() * 0.19).toFixed(3));
     async function step(name, out) {
       c.order.push(name); c.running = name;
       c.nodes[name] = { status: 'STARTED', start: Date.now() };
