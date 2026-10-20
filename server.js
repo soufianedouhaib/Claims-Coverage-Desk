@@ -498,8 +498,8 @@ app.post('/api/auth/login', json, wrap(async function (req, res) {
 const ROLE_BLURB = {
   admin: 'Everything, including users and set-up',
   intake: 'Submits claims and follows their progress',
-  handler: 'Completes quick sign-offs',
-  senior: 'Completes detailed reviews and quick sign-offs'
+  handler: 'Quick sign-offs: sees only claims routed to quick sign-off',
+  senior: 'Detailed reviews: sees only claims routed to detailed review'
 };
 // Public: the demo accounts shown on the sign-in page.
 app.get('/api/auth/demo-accounts', wrap(async function (req, res) {
@@ -513,7 +513,7 @@ app.post('/api/auth/demo', json, wrap(async function (req, res) {
   if (!auth.demoEnabled()) return res.status(404).json({ error: 'Demo accounts are switched off.' });
   await auth.ensureDemoAccounts();
   const u = await auth.getUser(req.body && req.body.email);
-  if (!u || !u.demo || u.active === false) return res.status(404).json({ error: 'That demo account is not available.' });
+  if (!auth.quickSignIn(u)) return res.status(404).json({ error: 'That account is not available for one-click sign-in.' });
   u.lastLoginAt = nowIso();
   await auth.saveUser(u);
   auth.setSession(res, u, originOf(req).startsWith('https'));
@@ -528,8 +528,36 @@ app.get('/api/me', wrap(async function (req, res) {
   const p = auth.publicUser(u);
   p.can = auth.ROLES[u.role].can;
   p.storageReady = store.persistent();
+  p.support = supportInfo();
   res.json(p);
 }));
+
+// Details for the "Contact Opus" email. Public, so the sign-in page can offer it too.
+function supportInfo() {
+  return {
+    email: process.env.SUPPORT_EMAIL || 'support@opus.com',
+    product: 'Claims Coverage Desk',
+    workflowId: WORKFLOW_ID,
+    orgId: process.env.OPUS_ORG_ID || 'b99049b2-1fe2-4338-aa11-5c0b2d17351f',
+    workspaceId: process.env.OPUS_WORKSPACE_ID || '77f9dccc-eefa-4966-a57f-c55aef25ccce'
+  };
+}
+app.get('/api/support-info', function (req, res) { res.json(supportInfo()); });
+
+// Which claims a person may see. Returns false for anything outside their scope (served as 404).
+function canSeeClaim(u, c, review) {
+  if (!u || !c) return false;
+  if (auth.can(u, 'view_all')) return true;
+  if (u.role === 'intake') return c.createdBy === u.email;
+  const kind = (review && review.kind) || c.reviewKind || null;
+  if (!kind) return false;
+  return auth.can(u, REVIEW_KIND[kind].perm);
+}
+async function visibleRows(u, claims) {
+  const rows = [];
+  for (const c of claims) { const r = await reviewForClaim(c); if (canSeeClaim(u, c, r)) rows.push(toRow(c, r)); }
+  return rows;
+}
 
 app.post('/api/account/password', json, auth.requireAuth(), wrap(async function (req, res) {
   const u = await auth.currentUser(req);
@@ -557,9 +585,11 @@ app.post('/api/users', json, auth.requireAuth('users'), wrap(async function (req
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(400).json({ error: 'Enter a valid email address.' });
   if (!auth.ROLES[b.role]) return res.status(400).json({ error: 'Choose a role.' });
   if (!b.name || !String(b.name).trim()) return res.status(400).json({ error: 'Enter a name.' });
-  if (String(b.password || '').length < 10) return res.status(400).json({ error: 'Use at least 10 characters for the password.' });
+  if (b.password && String(b.password).length < 10) return res.status(400).json({ error: 'Use at least 10 characters for the password, or leave it empty for one-click sign-in only.' });
+  if (!b.password && b.quickSignIn === false) return res.status(400).json({ error: 'Set a password, or allow one-click sign-in, so this person can sign in.' });
   if (await auth.getUser(email)) return res.status(409).json({ error: 'A user with that email already exists.' });
-  const u = await auth.saveUser({ email: email, name: String(b.name).trim(), role: b.role, active: true, passHash: auth.hashPassword(b.password), createdAt: nowIso(), sessionVersion: 1 });
+  const u = await auth.saveUser({ email: email, name: String(b.name).trim(), role: b.role, active: true, quickSignIn: b.quickSignIn !== false,
+    passHash: auth.hashPassword(b.password || crypto.randomBytes(24).toString('hex')), createdAt: nowIso(), sessionVersion: 1 });
   res.json({ user: auth.publicUser(u) });
 }));
 
@@ -575,6 +605,7 @@ app.patch('/api/users/:email', json, auth.requireAuth('users'), wrap(async funct
     u.role = b.role; u.sessionVersion = (u.sessionVersion || 1) + 1;
   }
   if (b.name !== undefined && String(b.name).trim()) u.name = String(b.name).trim();
+  if (b.quickSignIn !== undefined) u.quickSignIn = !!b.quickSignIn;
   if (b.active !== undefined) {
     if (self && !b.active) return res.status(400).json({ error: 'You cannot deactivate your own account.' });
     u.active = !!b.active; u.sessionVersion = (u.sessionVersion || 1) + 1;
@@ -683,18 +714,20 @@ app.get('/api/claims', auth.requireAuth('view'), wrap(async function (req, res) 
   // Keep the newest in-flight claims fresh without hammering the engine.
   const stale = claims.filter(function (c) { return !c.final; }).slice(0, 6);
   for (const c of stale) { const r = await refreshClaim(c); Object.assign(c, r); }
-  const rows = [];
-  for (const c of claims) rows.push(toRow(c, await reviewForClaim(c)));
+  const rows = await visibleRows(await auth.currentUser(req), claims);
   res.json({ claims: rows });
 }));
 
 app.get('/api/claims.csv', auth.requireAuth('export'), wrap(async function (req, res) {
   const claims = await allClaims();
   claims.sort(function (a, b) { return String(b.createdAt).localeCompare(String(a.createdAt)); });
+  const csvUser = await auth.currentUser(req);
   const cols = ['Claim reference', 'Title', 'Insured', 'Policy number', 'Status', 'Proposed decision', 'Confirmed decision', 'Review type', 'Submitted by', 'Submitted at', 'Completed at'];
   const lines = [cols];
   for (const c of claims) {
-    const r = toRow(c, await reviewForClaim(c));
+    const rv = await reviewForClaim(c);
+    if (!canSeeClaim(csvUser, c, rv)) continue;
+    const r = toRow(c, rv);
     lines.push([r.claimReference, r.title, r.insuredName, r.policyNumber, STATUS_LABELS[r.status] || r.status, r.coverageDecision, r.confirmedDecision, r.reviewKind ? REVIEW_KIND[r.reviewKind].label : '', r.createdByName, r.createdAt, r.completedAt]);
   }
   const csv = lines.map(function (l) { return l.map(function (v) { v = v == null ? '' : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }).join(','); }).join('\r\n');
@@ -711,10 +744,11 @@ const STATUS_LABELS = {
 app.get('/api/claims/:id', auth.requireAuth('view'), wrap(async function (req, res) {
   let c = await getClaim(req.params.id);
   if (!c || c.deleted) return res.status(404).json({ error: 'Claim not found.' });
+  const u = await auth.currentUser(req);
+  if (!canSeeClaim(u, c, await reviewForClaim(c))) return res.status(404).json({ error: 'Claim not found.' });
   c = await refreshClaim(c, req.query.refresh === '1');
   const data = await getClaimData(c.id);
   const review = await reviewForClaim(c);
-  const u = await auth.currentUser(req);
   const nodes = {};
   Object.keys(data.nodes || {}).forEach(function (k) { nodes[k] = data.nodes[k].outputs || {}; });
   res.json({
@@ -731,6 +765,8 @@ app.get('/api/claims/:id', auth.requireAuth('view'), wrap(async function (req, r
     results: data.results || null,
     review: review ? Object.assign(reviewRow(review, c), { canAct: auth.can(u, REVIEW_KIND[review.kind].perm) }) : null,
     failureDetail: auth.can(u, 'system') ? (c.failureDetail || null) : undefined,
+    support: { caseId: c.caseId, status: c.engineStatus, reason: c.error || null, workflowVersion: c.workflowVersion || null,
+      reviewExecutionId: review ? review.executionId || null : null, submittedAt: c.createdAt, submittedBy: c.createdByName, finishedAt: c.completedAt || null },
     inputType: auth.can(u, 'system') ? INPUTS.evidence.type : undefined
   });
 }));
@@ -738,7 +774,7 @@ app.get('/api/claims/:id', auth.requireAuth('view'), wrap(async function (req, r
 // Open an input document or the generated coverage position document.
 app.get('/api/claims/:id/file/:which', auth.requireAuth('view'), wrap(async function (req, res) {
   const c = await getClaim(req.params.id);
-  if (!c || c.deleted) return res.status(404).json({ error: 'Claim not found.' });
+  if (!c || c.deleted || !canSeeClaim(await auth.currentUser(req), c, await reviewForClaim(c))) return res.status(404).json({ error: 'Claim not found.' });
   let url = null;
   const w = req.params.which;
   if (w === 'fnol' || w === 'schedule' || w === 'wording') url = c.files[w] && c.files[w].url;
@@ -756,7 +792,7 @@ app.get('/api/claims/:id/file/:which', auth.requireAuth('view'), wrap(async func
 
 app.post('/api/claims/:id/refresh', auth.requireAuth('view'), wrap(async function (req, res) {
   const c = await getClaim(req.params.id);
-  if (!c || c.deleted) return res.status(404).json({ error: 'Claim not found.' });
+  if (!c || c.deleted || !canSeeClaim(await auth.currentUser(req), c, await reviewForClaim(c))) return res.status(404).json({ error: 'Claim not found.' });
   const r = await refreshClaim(c, true);
   res.json({ claim: toRow(r, await reviewForClaim(r)) });
 }));
@@ -778,8 +814,7 @@ app.get('/api/dashboard', auth.requireAuth('view'), wrap(async function (req, re
   const claims = await allClaims();
   claims.sort(function (a, b) { return String(b.createdAt).localeCompare(String(a.createdAt)); });
   for (const c of claims.filter(function (c) { return !c.final; }).slice(0, 6)) Object.assign(c, await refreshClaim(c));
-  const rows = [];
-  for (const c of claims) rows.push(toRow(c, await reviewForClaim(c)));
+  const rows = await visibleRows(u, claims);
   const reviews = (await allReviews()).filter(function (r) { return r.status === 'pending'; });
   const weekAgo = Date.now() - 7 * 864e5;
   res.json({
@@ -794,6 +829,67 @@ app.get('/api/dashboard', auth.requireAuth('view'), wrap(async function (req, re
       detailed: auth.can(u, 'review_detailed') ? reviews.filter(function (r) { return r.kind === 'detailed'; }).length : null
     },
     recent: rows.slice(0, 8)
+  });
+}));
+
+// ---------------------------------------------------------------------------
+// Routes: reports (always limited to what the person may see)
+// ---------------------------------------------------------------------------
+function decisionBucket(d) {
+  const n = normDecision(d);
+  return { covered: 'Covered', partial: 'Partially covered', not: 'Not covered', info: 'More information required' }[n] || (d ? 'Other' : null);
+}
+app.get('/api/reports', auth.requireAuth('reports'), wrap(async function (req, res) {
+  const u = await auth.currentUser(req);
+  const days = Math.max(7, Math.min(90, Number(req.query.days) || 30));
+  const since = Date.now() - days * 864e5;
+  const claims = (await allClaims()).filter(function (c) { return Date.parse(c.createdAt) >= since; });
+  const rows = [], reviews = [];
+  for (const c of claims) {
+    const r = await reviewForClaim(c);
+    if (!canSeeClaim(u, c, r)) continue;
+    rows.push(toRow(c, r));
+    if (r) reviews.push(r);
+  }
+  const DEC = ['Covered', 'Partially covered', 'Not covered', 'More information required', 'Other'];
+  const proposed = {}, confirmed = {};
+  DEC.forEach(function (d) { proposed[d] = 0; confirmed[d] = 0; });
+  rows.forEach(function (r) {
+    const p = decisionBucket(r.coverageDecision); if (p) proposed[p]++;
+    const c = decisionBucket(r.confirmedDecision); if (c) confirmed[c]++;
+  });
+  // Claims per day
+  const perDay = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(Date.now() - i * 864e5).toISOString().slice(0, 10);
+    perDay.push({ day: d, submitted: rows.filter(function (r) { return String(r.createdAt).slice(0, 10) === d; }).length,
+      completed: rows.filter(function (r) { return r.completedAt && String(r.completedAt).slice(0, 10) === d; }).length });
+  }
+  const mins = function (a, b) { const x = (Date.parse(b) - Date.parse(a)) / 60000; return isFinite(x) && x >= 0 ? x : null; };
+  const avg = function (xs) { xs = xs.filter(function (x) { return x != null; }); return xs.length ? xs.reduce(function (s, x) { return s + x; }, 0) / xs.length : null; };
+  const done = reviews.filter(function (r) { return r.status === 'completed'; });
+  const changed = done.filter(function (r) { const a = r.submitted && r.submitted.handler_review_audit || r.submitted && r.submitted.quick_signoff_audit; return Array.isArray(a) && a[0] && a[0].decision_changed; });
+  const outcomes = {};
+  done.forEach(function (r) { const o = (r.submitted && r.submitted[REVIEW_KIND[r.kind].outcomeVar]) || 'Unknown'; outcomes[o] = (outcomes[o] || 0) + 1; });
+  res.json({
+    days: days,
+    scope: auth.can(u, 'view_all') ? 'all' : u.role === 'intake' ? 'mine' : u.role === 'handler' ? 'quick' : 'detailed',
+    totals: {
+      claims: rows.length,
+      completed: rows.filter(function (r) { return r.status === 'completed'; }).length,
+      awaiting: rows.filter(function (r) { return r.status.indexOf('awaiting') === 0; }).length,
+      inProgress: rows.filter(function (r) { return r.status === 'processing' || r.status === 'queued'; }).length,
+      problems: rows.filter(function (r) { return ['failed', 'cancelled', 'timed_out'].indexOf(r.status) >= 0; }).length,
+      quick: rows.filter(function (r) { return r.reviewKind === 'quick'; }).length,
+      detailed: rows.filter(function (r) { return r.reviewKind === 'detailed'; }).length,
+      reviewsDone: done.length,
+      overrides: changed.length,
+      avgTurnaroundMin: avg(rows.filter(function (r) { return r.completedAt; }).map(function (r) { return mins(r.createdAt, r.completedAt); })),
+      avgReviewWaitMin: avg(done.map(function (r) { return mins(r.receivedAt, r.completedAt); }))
+    },
+    perDay: perDay,
+    decisions: DEC.map(function (d) { return { decision: d, proposed: proposed[d], confirmed: confirmed[d] }; }).filter(function (x) { return x.decision !== 'Other' || x.proposed || x.confirmed; }),
+    outcomes: Object.keys(outcomes).map(function (k) { return { outcome: k, count: outcomes[k] }; }).sort(function (a, b) { return b.count - a.count; })
   });
 }));
 
