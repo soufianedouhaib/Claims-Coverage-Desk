@@ -423,6 +423,10 @@ function reviewRow(r, c) {
     completedByName: r.completedByName || null,
     outcome: r.submitted ? r.submitted[REVIEW_KIND[r.kind].outcomeVar] || null : null,
     confirmedDecision: r.submitted ? r.submitted.confirmed_coverage_decision || null : null,
+    notes: r.submitted ? r.submitted.handler_notes || null : null,
+    overrideReason: r.submitted ? r.submitted.handler_override_reason || null : null,
+    reviewedBy: r.submitted ? r.submitted.handler_reviewed_by || r.completedByName || null : null,
+    reviewedAt: r.submitted ? r.submitted.handler_reviewed_at || r.completedAt || null : null,
     lastError: r.lastError || null
   };
 }
