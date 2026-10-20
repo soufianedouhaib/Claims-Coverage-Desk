@@ -884,6 +884,7 @@ function webhookSecretCandidates(req) {
   const auth = String(req.headers.authorization || '');
   if (/^bearer\s+/i.test(auth)) out.push(['authorization bearer', auth.replace(/^bearer\s+/i, '')]);
   if (req.query.key != null) out.push(['url key', req.query.key]);
+  if (req.hookPathSecret) out.push(['url path', req.hookPathSecret]);
   return out;
 }
 function webhookAuthorised(req) {
@@ -900,23 +901,35 @@ function describeDelivery(req) {
   const names = Object.keys(req.headers).filter(function (h) { return !STD_HEADERS.test(h); });
   const want = cleanSecret(process.env.REVIEW_WEBHOOK_SECRET);
   const cands = webhookSecretCandidates(req).map(function (c) { return c[0] + ' (' + cleanSecret(c[1]).length + ' chars, expected ' + want.length + ')'; });
-  return 'Secret looked for in: ' + (cands.length ? cands.join(', ') : 'nothing found') + '. Other headers received: ' + (names.length ? names.join(', ') : 'none');
+  const q = Object.keys(req.query || {});
+  return 'Secret looked for in: ' + (cands.length ? cands.join(', ') : 'nothing found') + '. Other headers received: ' + (names.length ? names.join(', ') : 'none') +
+    '. URL parameters received: ' + (q.length ? q.join(', ') : 'none') + '. Path: ' + String(req.path || '').replace(/\/[A-Za-z0-9_\-]{20,}/g, '/<secret>');
 }
 
 // Record every delivery attempt (accepted or not) so the System page can show what arrived.
 function noteAttempt(req, status, note) {
   const b = req.body || {};
   return store.setJSON('meta:lastWebhookAttempt', { at: nowIso(), status: status, note: note,
-    kind: req.query.kind || null, executionId: b.execution_id || null, bytes: Number(req.headers['content-length']) || null }).catch(function () {});
+    kind: hookKind(req), executionId: b.execution_id || null, bytes: Number(req.headers['content-length']) || null }).catch(function () {});
 }
-app.post('/api/hooks/review', bigJson, wrap(async function (req, res) {
+// The kind and the secret can also be path segments, for platforms that drop URL parameters:
+//   /api/hooks/review/detailed/<secret>   /api/hooks/review/quick/<secret>   /api/hooks/review/<secret>
+function hookKind(req) { return req.query.kind || req.hookPathKind || null; }
+function hookPath(req, res, next) {
+  [req.params.a, req.params.b].forEach(function (seg) {
+    if (!seg) return;
+    if (seg === 'detailed' || seg === 'quick') req.hookPathKind = seg; else req.hookPathSecret = seg;
+  });
+  next();
+}
+app.post(['/api/hooks/review', '/api/hooks/review/:a', '/api/hooks/review/:a/:b'], hookPath, bigJson, wrap(async function (req, res) {
   if (!process.env.REVIEW_WEBHOOK_SECRET) { await noteAttempt(req, 503, 'REVIEW_WEBHOOK_SECRET not set'); return res.status(503).json({ error: 'Review webhook is not configured.' }); }
   if (!webhookAuthorised(req)) { await noteAttempt(req, 401, 'Secret missing or wrong. ' + describeDelivery(req)); return res.status(401).json({ error: 'Not authorised.' }); }
   const p = req.body || {};
   if (!p.callback || !p.callback.url || !p.callback.token) { await noteAttempt(req, 400, 'No callback block in the delivery'); return res.status(400).json({ error: 'Missing callback block.' }); }
   await noteAttempt(req, 200, 'Accepted');
   const schema = p.expected_output_schema || {};
-  const kind = kindFromSchema(schema, req.query.kind);
+  const kind = kindFromSchema(schema, hookKind(req));
   const rawInputs = p.inputs || {};
   const inputs = {};
   let reviewedOutputs = {};
