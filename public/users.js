@@ -26,7 +26,7 @@ AP.boot({
         var el = document.getElementById('list');
         el.innerHTML = '<div class="table-wrap"><table class="data cards"><thead><tr><th>Name</th><th>Role</th><th>Status</th><th>Sign-in page</th><th>Last sign-in</th><th></th></tr></thead><tbody>' +
           j.users.map(function (u) {
-            return '<tr><td data-label="Name"><div class="primary-cell">' + E(u.name) + (u.email === me.email ? ' <span class="small muted">(you)</span>' : '') + (u.demo ? ' <span class="pill plain info">Demo</span>' : '') + '</div><div class="sub wrap-any">' + E(u.email) + '</div></td>' +
+            return '<tr><td data-label="Name"><div class="primary-cell">' + E(u.name) + (u.email === me.email ? ' <span class="small muted">(you)</span>' : '') + '</div><div class="sub wrap-any">' + E(u.email) + '</div></td>' +
               '<td data-label="Role">' + E(u.roleLabel) + '</td>' +
               '<td data-label="Status">' + (u.active ? '<span class="pill ok">Active</span>' : '<span class="pill">Deactivated</span>') + '</td>' +
               '<td data-label="Sign-in page">' + (u.quickSignIn ? '<span class="pill plain info">One-click</span>' : '<span class="muted small">Password only</span>') + '</td>' +
@@ -83,7 +83,7 @@ AP.boot({
     }
     function del(u) {
       AP.modal('Delete ' + u.name + '?', '<p>This permanently removes <strong class="wrap-any">' + E(u.email) + '</strong>. They are signed out and can no longer sign in.' +
-        (u.demo ? ' This demo account also disappears from the sign-in page.' : '') + '</p><p class="small muted">Claims and reviews they worked on are kept. To block access but keep the account, use Edit and untick Active instead.</p>' +
+        (u.demo ? ' It also disappears from the sign-in page.' : '') + '</p><p class="small muted">Claims and reviews they worked on are kept. To block access but keep the account, use Edit and untick Active instead.</p>' +
         '<div class="alert bad" id="d-err" hidden></div>', [
         { label: 'Cancel' },
         { label: 'Delete account', danger: true, onClick: function (back, close) {
