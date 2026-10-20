@@ -873,15 +873,36 @@ function normDecision(s) {
 // ---------------------------------------------------------------------------
 // Webhooks from the workflow engine
 // ---------------------------------------------------------------------------
-function webhookAuthorised(req) {
-  const want = process.env.REVIEW_WEBHOOK_SECRET;
-  if (!want) return false;
+// The secret can arrive in the x-webhook-secret header (default name, change with
+// REVIEW_WEBHOOK_HEADER), as "Authorization: Bearer <secret>", or as ?key=<secret> in the URL.
+// Surrounding spaces and quotes are ignored on both sides.
+function cleanSecret(v) { return String(v == null ? '' : v).trim().replace(/^["']|["']$/g, '').trim(); }
+function webhookSecretCandidates(req) {
   const hdr = (process.env.REVIEW_WEBHOOK_HEADER || 'x-webhook-secret').toLowerCase();
-  const got = String(req.headers[hdr] || req.query.key || '');
-  return got.length === want.length && crypto.timingSafeEqual(Buffer.from(got), Buffer.from(want));
+  const out = [];
+  if (req.headers[hdr] != null) out.push(['header ' + hdr, req.headers[hdr]]);
+  const auth = String(req.headers.authorization || '');
+  if (/^bearer\s+/i.test(auth)) out.push(['authorization bearer', auth.replace(/^bearer\s+/i, '')]);
+  if (req.query.key != null) out.push(['url key', req.query.key]);
+  return out;
+}
+function webhookAuthorised(req) {
+  const want = cleanSecret(process.env.REVIEW_WEBHOOK_SECRET);
+  if (!want) return false;
+  return webhookSecretCandidates(req).some(function (c) {
+    const got = cleanSecret(c[1]);
+    return got.length === want.length && crypto.timingSafeEqual(Buffer.from(got), Buffer.from(want));
+  });
+}
+// What arrived, without revealing any secret: header names, and the length of what was sent.
+const STD_HEADERS = /^(host|content-type|content-length|user-agent|accept|accept-encoding|connection|x-forwarded-.*|x-real-ip|x-vercel-.*|forwarded|traceparent|tracestate|baggage|via|cdn-loop|x-amz-.*)$/;
+function describeDelivery(req) {
+  const names = Object.keys(req.headers).filter(function (h) { return !STD_HEADERS.test(h); });
+  const want = cleanSecret(process.env.REVIEW_WEBHOOK_SECRET);
+  const cands = webhookSecretCandidates(req).map(function (c) { return c[0] + ' (' + cleanSecret(c[1]).length + ' chars, expected ' + want.length + ')'; });
+  return 'Secret looked for in: ' + (cands.length ? cands.join(', ') : 'nothing found') + '. Other headers received: ' + (names.length ? names.join(', ') : 'none');
 }
 
-// One URL serves both review steps; the step is recognised from the outputs it expects.
 // Record every delivery attempt (accepted or not) so the System page can show what arrived.
 function noteAttempt(req, status, note) {
   const b = req.body || {};
@@ -890,7 +911,7 @@ function noteAttempt(req, status, note) {
 }
 app.post('/api/hooks/review', bigJson, wrap(async function (req, res) {
   if (!process.env.REVIEW_WEBHOOK_SECRET) { await noteAttempt(req, 503, 'REVIEW_WEBHOOK_SECRET not set'); return res.status(503).json({ error: 'Review webhook is not configured.' }); }
-  if (!webhookAuthorised(req)) { await noteAttempt(req, 401, 'Header x-webhook-secret missing or wrong'); return res.status(401).json({ error: 'Not authorised.' }); }
+  if (!webhookAuthorised(req)) { await noteAttempt(req, 401, 'Secret missing or wrong. ' + describeDelivery(req)); return res.status(401).json({ error: 'Not authorised.' }); }
   const p = req.body || {};
   if (!p.callback || !p.callback.url || !p.callback.token) { await noteAttempt(req, 400, 'No callback block in the delivery'); return res.status(400).json({ error: 'Missing callback block.' }); }
   await noteAttempt(req, 200, 'Accepted');
