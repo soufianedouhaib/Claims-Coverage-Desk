@@ -18,7 +18,11 @@ const INPUTS = {
   fnol:     { id: 'fnol_claim_notification_pdf',        type: 'file',        displayName: 'Fnol Claim Notification Pdf' },
   schedule: { id: 'policy_schedule_or_certificate_pdf', type: 'file',        displayName: 'Policy Schedule Or Certificate Pdf' },
   wording:  { id: 'policy_wording_or_pds_pdf',          type: 'file',        displayName: 'Policy Wording Or Pds Pdf' },
-  evidence: { id: 'supporting_evidence',                type: process.env.EVIDENCE_INPUT_TYPE || 'array_files', displayName: 'Supporting Evidence' }
+  // A list of files is type "array" with a file item definition ("array_files" is not a valid
+  // type in the v1 case API and made the run fail before its first step).
+  evidence: { id: 'supporting_evidence',                type: process.env.EVIDENCE_INPUT_TYPE || 'array', displayName: 'Supporting Evidence',
+    typeDefinition: { id: 'b3ab3b8c-ddcc-4b91-bf4e-cb50338bd9ac', variable_name: 'item', display_name: 'Item', default: null, description: null, is_nullable: false,
+      tags: [], options: [], allowed_types: [{ type: 'file', type_definition: null, functions: [], type_definition_enforced: true }], current_type: null, non_editable_fields: [], can_delete: true } }
 };
 
 // Workflow step names (as the engine reports them) -> what the console shows.
@@ -243,7 +247,7 @@ function absorbFacts(c, data) {
 }
 
 async function refreshClaim(c, force) {
-  if (!c || c.final) return c;
+  if (!c || (c.final && (c.engineStatus === 'COMPLETED' || c.failureDetail !== undefined))) return c;
   const fresh = c.lastPolledAt && (Date.now() - Date.parse(c.lastPolledAt) < 4000);
   if (fresh && !force) return c;
   if (!engine.configured()) return c;
@@ -295,7 +299,14 @@ async function refreshClaim(c, force) {
         }
       } catch (e) { c.pollError = e.message; }
     }
-    if (c.engineStatus === 'FAILED' && !c.error) c.error = 'The assessment could not be completed.';
+    if (c.engineStatus === 'FAILED' && !c.error) {
+      c.error = (c.progress && c.progress.executed) ? 'The assessment could not be completed.' : 'The assessment stopped before its first step. This usually means an input was rejected.';
+    }
+    // Keep whatever the engine says about a failure, for administrators.
+    if (['FAILED', 'TIMED_OUT', 'CANCELLED'].indexOf(c.engineStatus) >= 0 && c.failureDetail === undefined) {
+      try { const r = await engine.results(c.caseId); c.failureDetail = r && r.body ? JSON.stringify(r.body).slice(0, 1500) : (r ? JSON.stringify(r).slice(0, 1500) : ''); }
+      catch (e) { c.failureDetail = String(e.detail || e.message || '').slice(0, 1500); }
+    }
     if (c.engineStatus === 'TIMED_OUT' && !c.error) c.error = 'The assessment ran out of time (a review may have passed its deadline).';
     absorbFacts(c, data);
     if (TERMINAL.indexOf(c.engineStatus) >= 0 && (c.engineStatus !== 'COMPLETED' || c.resultsFetched)) c.final = true;
@@ -588,6 +599,7 @@ app.post('/api/claims', json, auth.requireAuth('submit'), wrap(async function (r
   payload[INPUTS.schedule.id] = { value: files.schedule.url, type: INPUTS.schedule.type, displayName: INPUTS.schedule.displayName };
   payload[INPUTS.wording.id] = { value: files.wording.url, type: INPUTS.wording.type, displayName: INPUTS.wording.displayName };
   payload[INPUTS.evidence.id] = { value: files.evidence.map(function (e) { return e.url; }), type: INPUTS.evidence.type, displayName: INPUTS.evidence.displayName };
+  if (INPUTS.evidence.type === 'array') payload[INPUTS.evidence.id].typeDefinition = INPUTS.evidence.typeDefinition;
 
   const claim = {
     id: caseId, caseId: caseId, title: title, notes: notes,
@@ -664,7 +676,9 @@ app.get('/api/claims/:id', auth.requireAuth('view'), wrap(async function (req, r
     steps: stepsFor(c, data, review),
     outputs: nodes,
     results: data.results || null,
-    review: review ? Object.assign(reviewRow(review, c), { canAct: auth.can(u, REVIEW_KIND[review.kind].perm) }) : null
+    review: review ? Object.assign(reviewRow(review, c), { canAct: auth.can(u, REVIEW_KIND[review.kind].perm) }) : null,
+    failureDetail: auth.can(u, 'system') ? (c.failureDetail || null) : undefined,
+    inputType: auth.can(u, 'system') ? INPUTS.evidence.type : undefined
   });
 }));
 
@@ -868,11 +882,18 @@ function webhookAuthorised(req) {
 }
 
 // One URL serves both review steps; the step is recognised from the outputs it expects.
+// Record every delivery attempt (accepted or not) so the System page can show what arrived.
+function noteAttempt(req, status, note) {
+  const b = req.body || {};
+  return store.setJSON('meta:lastWebhookAttempt', { at: nowIso(), status: status, note: note,
+    kind: req.query.kind || null, executionId: b.execution_id || null, bytes: Number(req.headers['content-length']) || null }).catch(function () {});
+}
 app.post('/api/hooks/review', bigJson, wrap(async function (req, res) {
-  if (!process.env.REVIEW_WEBHOOK_SECRET) return res.status(503).json({ error: 'Review webhook is not configured.' });
-  if (!webhookAuthorised(req)) return res.status(401).json({ error: 'Not authorised.' });
+  if (!process.env.REVIEW_WEBHOOK_SECRET) { await noteAttempt(req, 503, 'REVIEW_WEBHOOK_SECRET not set'); return res.status(503).json({ error: 'Review webhook is not configured.' }); }
+  if (!webhookAuthorised(req)) { await noteAttempt(req, 401, 'Header x-webhook-secret missing or wrong'); return res.status(401).json({ error: 'Not authorised.' }); }
   const p = req.body || {};
-  if (!p.callback || !p.callback.url || !p.callback.token) return res.status(400).json({ error: 'Missing callback block.' });
+  if (!p.callback || !p.callback.url || !p.callback.token) { await noteAttempt(req, 400, 'No callback block in the delivery'); return res.status(400).json({ error: 'Missing callback block.' }); }
+  await noteAttempt(req, 200, 'Accepted');
   const schema = p.expected_output_schema || {};
   const kind = kindFromSchema(schema, req.query.kind);
   const rawInputs = p.inputs || {};
@@ -941,7 +962,8 @@ app.get('/api/system', auth.requireAuth('system'), wrap(async function (req, res
       url: origin + '/api/hooks/review',
       header: process.env.REVIEW_WEBHOOK_HEADER || 'x-webhook-secret',
       secretSet: !!process.env.REVIEW_WEBHOOK_SECRET,
-      lastReceivedAt: await store.getJSON('meta:lastWebhookAt')
+      lastReceivedAt: await store.getJSON('meta:lastWebhookAt'),
+      lastAttempt: await store.getJSON('meta:lastWebhookAttempt')
     },
     caseCallback: process.env.PUBLIC_BASE_URL ? 'on' : 'off (set PUBLIC_BASE_URL to enable)',
     evidenceInputType: INPUTS.evidence.type,
