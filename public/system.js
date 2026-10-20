@@ -13,7 +13,8 @@ AP.boot({
           (s.missing.length ? '<div class="alert warn" style="margin-bottom:16px"><strong>Still to set:</strong> ' + s.missing.map(E).join(', ') + '. Redeploy after changing environment variables.</div>' : '<div class="alert ok" style="margin-bottom:16px">All required settings are in place.</div>') +
           '<div class="grid-2" style="margin-bottom:16px">' +
           '<section class="card"><div class="card-head"><h2>Review steps webhook</h2></div><div class="card-body stack">' +
-          '<p class="small muted" style="margin:0">In the workflow builder, set <strong>both</strong> handler review steps to run off-platform and point them here. Add the header below with the value of REVIEW_WEBHOOK_SECRET.</p>' +
+          '<p class="small muted" style="margin:0">In the workflow builder, connect each handler review step off-platform with its own URL below, replacing &lt;secret&gt; with the value of REVIEW_WEBHOOK_SECRET. No custom header is needed.</p>' +
+          '<div class="note-box small mono wrap-any">Detailed review: ' + E(s.reviewWebhook.url) + '/detailed/&lt;secret&gt;<br>Quick sign-off: ' + E(s.reviewWebhook.url) + '/quick/&lt;secret&gt;</div>' +
           AP.kv([
             ['Webhook URL', '<code class="wrap-any" style="display:block;margin-bottom:6px">' + E(s.reviewWebhook.url) + '</code><button class="btn small" type="button" id="cpUrl">Copy</button>', true],
             ['Header name', '<code>' + E(s.reviewWebhook.header) + '</code>', true],
