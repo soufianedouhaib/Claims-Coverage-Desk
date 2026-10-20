@@ -80,6 +80,33 @@ function clean(s) { return String(s).replace(/\bopus\b/gi, 'assessment service')
 const json = express.json({ limit: '1mb' });
 const bigJson = express.json({ limit: '6mb' });
 
+// One-time tidy-up when the built-in accounts moved from "Demo ..." @demo.local to their plain
+// names @claims.local: update who submitted / reviewed on existing claims and reviews.
+let recordsChecked = false;
+async function migrateRecords() {
+  if (recordsChecked) return; recordsChecked = true;
+  await auth.ensureDemoAccounts();
+  if (await store.getJSON('meta:recordsMoved')) return;
+  const fix = function (v) {
+    if (typeof v !== 'string') return v;
+    auth.ACCOUNT_MOVES.forEach(function (m) { v = v.split(m.fromName).join(m.toName).split(m.from).join(m.to); });
+    return v;
+  };
+  for (const c of await allClaims()) {
+    const before = JSON.stringify([c.createdBy, c.createdByName]);
+    c.createdBy = fix(c.createdBy); c.createdByName = fix(c.createdByName);
+    if (JSON.stringify([c.createdBy, c.createdByName]) !== before) await saveClaim(c);
+  }
+  for (const r of await allReviews()) {
+    const before = JSON.stringify([r.completedBy, r.completedByName, r.submitted]);
+    r.completedBy = fix(r.completedBy); r.completedByName = fix(r.completedByName);
+    if (r.submitted) r.submitted = JSON.parse(fix(JSON.stringify(r.submitted)));
+    if (JSON.stringify([r.completedBy, r.completedByName, r.submitted]) !== before) await saveReview(r);
+  }
+  await store.setJSON('meta:recordsMoved', new Date().toISOString());
+}
+app.use('/api', function (req, res, next) { migrateRecords().catch(function () { recordsChecked = false; }).then(function () { next(); }); });
+
 function wrap(fn) { return function (req, res, next) { Promise.resolve(fn(req, res, next)).catch(next); }; }
 function nowIso() { return new Date().toISOString(); }
 function rid() { return crypto.randomBytes(9).toString('base64url'); }
@@ -383,14 +410,53 @@ function kindFromSchema(schema, q) {
   return 'detailed';
 }
 
+// Matching a review that arrived from the workflow to its claim. Runs of the same claim (a sample
+// run again) share a claim reference, so the reference alone is not enough: among claims with that
+// reference that have no review yet, pick the one whose coverage assessment produced exactly the
+// figures the review carries (confidence, decision, settlement), then the one waiting at that kind
+// of review, then the oldest.
+function coverageOutputsOf(data) {
+  const nodes = (data && data.nodes) || {};
+  const k = Object.keys(nodes).find(function (x) { return nodeKey(x) === nodeKey('Determine Coverage'); });
+  return k ? (nodes[k].outputs || {}) : {};
+}
+function sameVal(a, b) {
+  if (a == null || b == null || a === '') return false;
+  if (typeof a === 'number' || typeof b === 'number') return Math.abs(Number(a) - Number(b)) < 1e-9;
+  return String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
+}
+async function matchScore(r, c) {
+  const inp = Object.assign({}, r.reviewedOutputs || {}, r.inputs || {});
+  const cov = coverageOutputsOf(await getClaimData(c.id));
+  let score = 0;
+  if (sameVal(inp.coverage_confidence_score, cov.coverage_confidence_score)) score += 4;
+  if (sameVal(inp.coverage_decision, cov.coverage_decision)) score += 1;
+  if (sameVal(inp.recommended_settlement_amount_after_excess, cov.recommended_settlement_amount_after_excess)) score += 2;
+  if (c.waitingKind === r.kind || c.expectedReview === r.kind) score += 1;
+  return score;
+}
+async function bestClaimFor(r, candidates) {
+  if (candidates.length <= 1) return candidates[0] || null;
+  for (const c of candidates) { try { Object.assign(c, await refreshClaim(c, true)); } catch (e) { /* use what we have */ } }
+  candidates.sort(function (a, b) { return String(a.createdAt).localeCompare(String(b.createdAt)); });
+  let best = null, bestScore = -1;
+  for (const c of candidates) { const sc = await matchScore(r, c); if (sc > bestScore) { best = c; bestScore = sc; } }
+  return best;
+}
+
 async function linkReview(r) {
   if (r.claimId) return r;
   const claims = await allClaims();
   let c = claims.find(function (x) { return x.caseId === r.executionId || x.id === r.executionId; });
   let how = c ? 'execution' : null;
   if (!c && r.claimReference) {
-    c = claims.find(function (x) { return x.claimReference && String(x.claimReference).trim() === String(r.claimReference).trim() && TERMINAL.indexOf(x.engineStatus) < 0; });
-    if (c) how = 'reference';
+    const same = claims.filter(function (x) { return !x.reviewId && x.claimReference && String(x.claimReference).trim() === String(r.claimReference).trim() && TERMINAL.indexOf(x.engineStatus) < 0; });
+    c = await bestClaimFor(r, same);
+    // Refreshing the candidates may already have matched this review; keep that result.
+    const fresh = await getReview(r.id);
+    if (fresh && fresh.claimId) return fresh;
+    if (c && c.reviewId) c = null;
+    if (c) how = same.length > 1 ? 'reference+figures' : 'reference';
   }
   if (!c) {
     const waiting = claims.filter(function (x) { return !x.reviewId && (x.engineStatus === 'WAITING' || x.engineStatus === 'IN_PROGRESS') && (!x.expectedReview || x.expectedReview === r.kind); });
@@ -405,17 +471,27 @@ async function linkReview(r) {
   return r;
 }
 
+// A claim reached its review step before its review was matched: pick its review among the
+// unmatched ones by the same rules. With several candidates and none carrying this claim's
+// figures, leave it for the next refresh rather than guess.
 async function linkOrphanReviews(c) {
-  const rs = await allReviews();
-  for (const r of rs) {
-    if (r.claimId || r.status !== 'pending') continue;
-    if (r.executionId === c.caseId || (c.claimReference && r.claimReference && String(r.claimReference).trim() === String(c.claimReference).trim())) {
-      r.claimId = c.id; r.linkedBy = 'later';
-      c.reviewId = r.id; c.reviewKind = r.kind;
-      await saveReview(r); await saveClaim(c);
-      return;
-    }
+  if (c.reviewId) return;
+  const rs = (await allReviews()).filter(function (r) {
+    if (r.claimId || r.status !== 'pending') return false;
+    if (c.waitingKind && r.kind !== c.waitingKind) return false;
+    return r.executionId === c.caseId || (c.claimReference && r.claimReference && String(r.claimReference).trim() === String(c.claimReference).trim());
+  });
+  if (!rs.length) return;
+  let pick = rs.find(function (r) { return r.executionId === c.caseId; });
+  if (!pick) {
+    let bestScore = -1;
+    rs.sort(function (a, b) { return String(a.receivedAt).localeCompare(String(b.receivedAt)); });
+    for (const r of rs) { const sc = await matchScore(r, c); if (sc > bestScore) { pick = r; bestScore = sc; } }
+    if (rs.length > 1 && bestScore < 4) return;
   }
+  pick.claimId = c.id; pick.linkedBy = 'later';
+  c.reviewId = pick.id; c.reviewKind = pick.kind;
+  await saveReview(pick); await saveClaim(c);
 }
 
 // One set of words on screen for both review types (the workflow still receives its own value).
@@ -1259,6 +1335,7 @@ app.post('/api/reviews/:id/link', json, auth.requireAuth('system'), wrap(async f
   if (!r || !c) return res.status(404).json({ error: 'Review or claim not found.' });
   r.claimId = c.id; r.linkedBy = 'manual';
   c.reviewId = r.id; c.reviewKind = r.kind;
+  if (r.status === 'completed' && r.submitted && r.submitted.confirmed_coverage_decision) c.confirmedDecision = r.submitted.confirmed_coverage_decision;
   await saveReview(r); await saveClaim(c);
   res.json({ ok: true });
 }));
