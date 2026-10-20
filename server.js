@@ -196,12 +196,13 @@ function stepsFor(c, data, review) {
   const byKey = {};
   Object.keys(nodes).forEach(function (k) { byKey[nodeKey(k)] = nodes[k]; });
   return STEPS.map(function (s) {
-    const names = Array.isArray(s.node) ? s.node : [s.node];
+    let names = Array.isArray(s.node) ? s.node : [s.node];
+    if (s.review) names = names.concat(Object.keys(nodes).filter(isReviewNodeName));
     let hit = null, hitName = null;
     names.forEach(function (n) { if (!hit && byKey[nodeKey(n)]) { hit = byKey[nodeKey(n)]; hitName = n; } });
     let label = s.label;
     if (s.review) {
-      const kind = hitName ? REVIEW_NODES[hitName] : c.reviewKind;
+      const kind = (hitName && REVIEW_NODES[hitName]) || c.reviewKind;
       if (kind) label = REVIEW_KIND[kind].label;
     }
     let st = hit ? String(hit.status || '').toUpperCase() : '';
@@ -285,7 +286,8 @@ async function refreshClaim(c, force) {
           if (k) { c.reviewKind = c.reviewKind || REVIEW_NODES[n]; if (String(data.nodes[k].status).toUpperCase() === 'WAITING') c.waitingKind = REVIEW_NODES[n]; }
         });
         if (REVIEW_NODES[running]) c.waitingKind = REVIEW_NODES[running];
-        if ((a.failedNodes || []).length && c.engineStatus === 'FAILED') c.error = 'The assessment stopped at: ' + a.failedNodes.map(labelForNode).join(', ');
+        const failed = (a.failedNodes || []).filter(function (n) { return !/^(input|output)$/i.test(n); });
+        if (failed.length && c.engineStatus === 'FAILED') c.error = 'The assessment stopped at: ' + labelForNode(failed[0]) + (failed.length > 1 ? ' (the steps after it did not run)' : '');
       }
     } catch (e) { /* audit is best-effort */ }
 
@@ -323,6 +325,7 @@ async function refreshClaim(c, force) {
 function labelForNode(name) {
   if (!name) return null;
   if (REVIEW_NODES[name]) return REVIEW_KIND[REVIEW_NODES[name]].label;
+  if (isReviewNodeName(name)) return 'Handler review';
   const s = STEPS.find(function (s) { return !Array.isArray(s.node) && nodeKey(s.node) === nodeKey(name); });
   return s ? s.label : 'Processing';
 }
@@ -338,6 +341,25 @@ async function allReviews() {
   for (const id of ids) { if (seen[id]) continue; seen[id] = 1; const r = await getReview(id); if (r && !r.dismissed) out.push(r); }
   return out;
 }
+
+// When a step is (re)connected off-platform, the platform may rename its variables to
+// generated ids such as "workflow_output_3dfyyjpmp" while keeping the display names. Map those
+// back to the names the console understands ("Handler Notes" -> handler_notes); the real
+// variable name is kept for sending the decision back.
+function snake(s) { return String(s || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, ''); }
+function canonicalName(varName, def) {
+  if (/^workflow_(output|input)_/.test(varName) && def && (def.display_name || def.displayName)) return snake(def.display_name || def.displayName);
+  return varName;
+}
+function canonicalSchema(schema) {
+  const out = {};
+  Object.keys(schema || {}).forEach(function (v) {
+    const def = schema[v] || {};
+    out[canonicalName(v, def)] = Object.assign({}, def, { variable_name: def.variable_name || v });
+  });
+  return out;
+}
+function isReviewNodeName(name) { return !!REVIEW_NODES[name] || /off-?platform|handler review|sign-?off|human task/i.test(String(name || '')); }
 
 function kindFromSchema(schema, q) {
   if (q === 'detailed' || q === 'quick') return q;
@@ -818,26 +840,29 @@ app.post('/api/reviews/:id/submit', json, auth.requireAuth(), wrap(async functio
       timestamp: at,
       note: 'Confirms or overrides the coverage position only. Does not authorise any payment or settlement.'
     };
-    const out = {};
+    const out = {}, outCanon = {};
     const schema = r.schema || {};
-    Object.keys(schema).forEach(function (v) {
-      const t = schema[v] && schema[v].type;
-      if (/_reviewed_by$/.test(v)) out[v] = reviewer;
-      else if (/_reviewed_at$/.test(v)) out[v] = at;
-      else if (/_audit$/.test(v)) out[v] = [auditEntry];
-      else if (v === k.outcomeVar) out[v] = outcome;
-      else if (v === 'confirmed_coverage_decision') out[v] = decision;
-      else if (v === 'handler_notes') out[v] = notes;
-      else if (v === 'handler_override_reason') out[v] = overrideReason;
-      else if (b[v] !== undefined) out[v] = coerce(t, b[v]);
-      else if (schema[v] && schema[v].is_nullable) out[v] = null;
+    // schema keys are the console's names; each entry's variable_name is what the workflow expects back.
+    Object.keys(schema).forEach(function (c) {
+      const t = schema[c] && schema[c].type;
+      const v = (schema[c] && schema[c].variable_name) || c;
+      if (/_reviewed_by$/.test(c)) out[v] = reviewer;
+      else if (/_reviewed_at$/.test(c)) out[v] = at;
+      else if (/_audit$/.test(c)) out[v] = [auditEntry];
+      else if (c === k.outcomeVar) out[v] = outcome;
+      else if (c === 'confirmed_coverage_decision') out[v] = decision;
+      else if (c === 'handler_notes') out[v] = notes;
+      else if (c === 'handler_override_reason') out[v] = overrideReason;
+      else if (b[c] !== undefined) out[v] = coerce(t, b[c]);
+      else if (schema[c] && schema[c].is_nullable) out[v] = null;
       else out[v] = coerce(t, '');
+      outCanon[c] = out[v];
     });
 
     r.status = 'submitting'; await saveReview(r);
     const resp = await engine.submitCallback(cb, out);
     if (resp.ok) {
-      r.status = 'completed'; r.completedAt = at; r.completedBy = u.email; r.completedByName = u.name; r.submitted = out; r.lastError = null;
+      r.status = 'completed'; r.completedAt = at; r.completedBy = u.email; r.completedByName = u.name; r.submitted = outCanon; r.submittedRaw = out; r.lastError = null;
       await saveReview(r);
       await store.del('reviewcb:' + r.id);
       if (r.claimId) {
@@ -928,7 +953,7 @@ app.post(['/api/hooks/review', '/api/hooks/review/:a', '/api/hooks/review/:a/:b'
   const p = req.body || {};
   if (!p.callback || !p.callback.url || !p.callback.token) { await noteAttempt(req, 400, 'No callback block in the delivery'); return res.status(400).json({ error: 'Missing callback block.' }); }
   await noteAttempt(req, 200, 'Accepted');
-  const schema = p.expected_output_schema || {};
+  const schema = canonicalSchema(p.expected_output_schema || {});
   const kind = kindFromSchema(schema, hookKind(req));
   const rawInputs = p.inputs || {};
   const inputs = {};
@@ -937,11 +962,11 @@ app.post(['/api/hooks/review', '/api/hooks/review/:a', '/api/hooks/review/:a/:b'
     const v = rawInputs[k];
     const val = v && typeof v === 'object' && 'value' in v ? v.value : v;
     const t = v && v.type;
-    if (k === 'review_node' || k === 'reviewed_node' || t === 'node') {
+    if (k === 'review_node' || k === 'reviewed_node' || t === 'node' || (t && t.type === 'node')) {
       reviewedOutputs = toValueMap(val && val.output);
       const ri = toValueMap(val && val.input);
       Object.keys(ri).forEach(function (x) { if (!(x in inputs)) inputs[x] = ri[x]; });
-    } else inputs[k] = val;
+    } else inputs[canonicalName(k, v)] = val;
   });
   const execId = String(p.execution_id || '');
   const dedupeKey = 'reviewexec:' + execId + ':' + kind;
