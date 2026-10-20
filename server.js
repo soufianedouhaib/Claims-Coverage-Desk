@@ -427,6 +427,33 @@ function reviewRow(r, c) {
   };
 }
 
+// Dates go back in the workflow's own date format. A date variable may carry a format string
+// (e.g. "%d/%m/%Y" or "UNIX") in its type definition; without one the platform default is
+// "%Y-%m-%d" (e.g. 2026-10-20).
+function dateFormatOf(def) {
+  def = def || {};
+  const td = def.type_definition || def.typeDefinition || (def.allowed_types && def.allowed_types[0] && def.allowed_types[0].type_definition);
+  const f = typeof td === 'string' ? td : (td && (td.format || td.date_format || td.dateFormat)) || def.format || def.date_format;
+  return (typeof f === 'string' && f.trim()) ? f.trim() : '%Y-%m-%d';
+}
+function formatDate(fmt, ymd, now) {
+  now = now || new Date();
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(ymd || ''));
+  const d = m ? new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], now.getUTCHours(), now.getUTCMinutes(), now.getUTCSeconds())) : now;
+  if (/^unix$/i.test(fmt)) return String(Math.floor(d.getTime() / 1000));
+  const p2 = function (n) { return String(n).padStart(2, '0'); };
+  const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const MONTH = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  const h = d.getUTCHours();
+  const map = { Y: d.getUTCFullYear(), y: p2(d.getUTCFullYear() % 100), m: p2(d.getUTCMonth() + 1), d: p2(d.getUTCDate()), H: p2(h), I: p2(h % 12 || 12),
+    M: p2(d.getUTCMinutes()), S: p2(d.getUTCSeconds()), b: MON[d.getUTCMonth()], B: MONTH[d.getUTCMonth()], p: h < 12 ? 'AM' : 'PM', '%': '%' };
+  return fmt.replace(/%([YymdHIMSbBp%])/g, function (_, t) { return String(map[t]); });
+}
+function reviewedAtDef(schema) {
+  const k = Object.keys(schema || {}).find(function (c) { return /_reviewed_at$/.test(c); });
+  return k ? schema[k] : null;
+}
+
 function coerce(type, v) {
   type = String(type || 'str').toLowerCase();
   if (v === undefined) return null;
@@ -794,6 +821,12 @@ app.get('/api/reviews/:id', auth.requireAuth(), wrap(async function (req, res) {
     schema: r.schema || {},
     submitted: r.submitted || null,
     outcomes: k.outcomes,
+    reviewedAt: (function () {
+      const def = reviewedAtDef(r.schema);
+      if (!def) return null;
+      const fmt = dateFormatOf(def);
+      return { format: fmt, example: formatDate(fmt, new Date().toISOString().slice(0, 10)) };
+    })(),
     decisions: DECISIONS,
     me: { name: u.name, email: u.email },
     claim: c ? { id: c.id, title: c.title, insuredName: c.insuredName, policyNumber: c.policyNumber, claimReference: c.claimReference,
@@ -847,7 +880,10 @@ app.post('/api/reviews/:id/submit', json, auth.requireAuth(), wrap(async functio
       const t = schema[c] && schema[c].type;
       const v = (schema[c] && schema[c].variable_name) || c;
       if (/_reviewed_by$/.test(c)) out[v] = reviewer;
-      else if (/_reviewed_at$/.test(c)) out[v] = at;
+      else if (/_reviewed_at$/.test(c)) {
+        const day = /^\d{4}-\d{2}-\d{2}$/.test(String(b.reviewed_on || '')) ? b.reviewed_on : at.slice(0, 10);
+        out[v] = (t === 'date' || !t) ? formatDate(dateFormatOf(schema[c]), day) : at;
+      }
       else if (/_audit$/.test(c)) out[v] = [auditEntry];
       else if (c === k.outcomeVar) out[v] = outcome;
       else if (c === 'confirmed_coverage_decision') out[v] = decision;
