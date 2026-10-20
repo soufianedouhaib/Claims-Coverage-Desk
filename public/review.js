@@ -96,7 +96,9 @@ AP.boot({
               (s.type === 'bool' ? '<select data-extra="' + E(v) + '"><option value="">—</option><option value="true">Yes</option><option value="false">No</option></select>' :
                 '<input type="' + (s.type === 'float' ? 'number' : 'text') + '" data-extra="' + E(v) + '">') + '</label>';
           }).join('') +
-          '<div class="note-box small">Recorded as reviewed by <strong>' + E(me.name) + '</strong> with the time you submit. This confirms or overrides the coverage position only; it does not authorise, calculate or settle any payment.</div>' +
+          (d.reviewedAt ? '<label class="field"><span class="req">Reviewed on</span><span class="hint">Choose the date from the calendar. It is sent to the workflow as <strong id="dateOut" class="mono">' + E(d.reviewedAt.example) + '</strong></span>' +
+            '<input type="date" id="reviewedOn" value="' + today() + '" max="' + today() + '" required></label>' : '') +
+          '<div class="note-box small">Recorded as reviewed by <strong>' + E(me.name) + '</strong>' + (d.reviewedAt ? '' : ' with the time you submit') + '. This confirms or overrides the coverage position only; it does not authorise, calculate or settle any payment.</div>' +
           '<div class="alert bad" id="err" role="alert"' + (r.lastError ? '' : ' hidden') + '>' + E(r.lastError || '') + '</div>' +
           '<button class="btn primary" type="submit" id="go">Submit decision</button></form>';
       } else {
@@ -132,6 +134,8 @@ AP.boot({
         saveDraft({ outcome: o, confirmed_coverage_decision: dec.value, notes: notes.value, override: ov ? ov.value : '' });
       }
       form.addEventListener('input', update); form.addEventListener('change', update); update();
+      var ro = document.getElementById('reviewedOn');
+      if (ro && d.reviewedAt) ro.addEventListener('change', function () { document.getElementById('dateOut').textContent = fmtDate(d.reviewedAt.format, ro.value) || d.reviewedAt.example; });
 
       form.addEventListener('submit', function (e) {
         e.preventDefault();
@@ -146,6 +150,8 @@ AP.boot({
         var values = { confirmed_coverage_decision: dec.value, handler_notes: notes.value.trim() };
         values[outcomeVar] = o;
         if (ov) values.handler_override_reason = ov.value.trim();
+        var ro = document.getElementById('reviewedOn');
+        if (ro) { if (!ro.value) { err.textContent = 'Pick the review date.'; err.hidden = false; return; } values.reviewed_on = ro.value; }
         form.querySelectorAll('[data-extra]').forEach(function (x) { if (x.value !== '') values[x.dataset.extra] = x.value; });
         AP.modal('Submit this decision?', AP.kv([['Outcome', o], ['Coverage decision', AP.decisionPill(dec.value), true]]) + '<p class="small muted" style="margin-top:12px">The assessment continues as soon as you submit. This cannot be undone from the console.</p>', [
           { label: 'Cancel' },
@@ -163,6 +169,17 @@ AP.boot({
       });
     }
 
+    function today() { var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+    // Same formatting the server applies, for the live preview under the date picker.
+    function fmtDate(fmt, ymd) {
+      var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd || ''); if (!m) return '';
+      if (/^unix$/i.test(fmt)) return String(Math.floor(Date.UTC(+m[1], +m[2] - 1, +m[3]) / 1000));
+      var MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      var MONTH = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+      var now = new Date(), h = now.getUTCHours(), p2 = function (n) { return String(n).padStart(2, '0'); };
+      var map = { Y: m[1], y: m[1].slice(2), m: m[2], d: m[3], H: p2(h), I: p2(h % 12 || 12), M: p2(now.getUTCMinutes()), S: p2(now.getUTCSeconds()), b: MON[+m[2] - 1], B: MONTH[+m[2] - 1], p: h < 12 ? 'AM' : 'PM', '%': '%' };
+      return fmt.replace(/%([YymdHIMSbBp%])/g, function (_, t) { return map[t]; });
+    }
     function width(v) { if (v == null || isNaN(Number(v))) return 0; v = Number(v); if (v <= 1) v *= 100; return Math.max(0, Math.min(100, Math.round(v))); }
 
     function load() {

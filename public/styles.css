@@ -143,7 +143,7 @@ code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monosp
 .btn:disabled { opacity: .55; cursor: not-allowed; }
 label.field { display: flex; flex-direction: column; gap: 6px; font-weight: 550; font-size: 13px; }
 label.field .hint { font-weight: 400; color: var(--text-3); font-size: 12.5px; }
-input[type=text], input[type=email], input[type=password], input[type=search], input[type=number], input[type=datetime-local], select, textarea {
+input[type=text], input[type=email], input[type=password], input[type=search], input[type=number], input[type=datetime-local], input[type=date], select, textarea {
   width: 100%; font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border-strong); border-radius: 8px; padding: 8px 10px;
 }
 textarea { min-height: 96px; resize: vertical; }
