@@ -1,7 +1,7 @@
 AP.boot({
   title: 'Claim', nav: 'claims',
   render: function (me, main) {
-    var E = AP.esc, R = AP.renderValue;
+    var E = function (x) { return AP.esc(x == null ? x : AP.tidyNumbers(x)); }, R = AP.renderValue; // assessment text: 16450.0 reads 16,450
     var id = AP.qs('id');
     var timer = null, lastJson = '';
     main.innerHTML = '<div id="body"><div class="loading-page"><span class="spinner"></span></div></div>';
@@ -60,14 +60,13 @@ AP.boot({
       if (AP.qs('new') === '1' && (c.status === 'processing' || c.status === 'queued')) {
         left.push('<div class="alert ok">Claim submitted. The assessment usually takes a few minutes; this page updates by itself.</div>');
       }
-      // Sample claim: what the sample is designed to show (the claim record does not grade itself).
+      // Sample claim: what the sample was built around, shown after the assessment and worded as
+      // the scenario rather than a promise; the claim record does not grade itself.
       var smp = c.sampleId && SAMPLES ? SAMPLES.find(function (x) { return x.id === c.sampleId; }) : null;
-      if (smp) {
-        left.push('<section class="card card-pad"><div class="sample-num" style="margin-bottom:4px">Sample · ' + E(smp.title) + '</div>' +
-          '<div class="expect"><div><div class="small muted">Expected decision</div>' + AP.decisionPill(smp.expectedDecision) + '</div>' +
-          '<div><div class="small muted">Expected review</div>' + AP.routeChip(smp.route) + '</div></div>' +
-          '<p class="small muted" style="margin:10px 0 0">' + E(smp.why) + '</p></section>');
-      }
+      var sampleBox = smp ? '<section class="card card-pad"><div class="sample-num" style="margin-bottom:4px">About this sample · ' + E(smp.title) + '</div>' +
+          '<div class="expect"><div><div class="small muted">Built to show</div>' + AP.decisionPill(smp.expectedDecision) + '</div>' +
+          '<div><div class="small muted">Usual review</div>' + AP.routeChip(smp.route) + '</div></div>' +
+          '<p class="small muted" style="margin:10px 0 0">' + E(smp.why) + ' The assessment decides each run for itself and can ask for more information first.</p></section>' : '';
       if (c.error && ['failed', 'cancelled', 'timed_out'].indexOf(c.status) >= 0) {
         left.push('<div class="alert bad">' + E(c.error) + (c.sampleId ? ' <a href="/new-claim.html#samples">Run the sample again</a>' : '') + '</div>');
         if (d.failureDetail) left.push('<section class="card"><details class="more" style="border-top:0"><summary>Technical details (administrators only)</summary><div class="inner"><div class="note-box pre mono small">' + E(d.failureDetail) + '</div></div></details></section>');
@@ -182,6 +181,7 @@ AP.boot({
       }
 
       if (!left.length) left.push('<div class="card card-pad"><p class="muted" style="margin:0">Results appear here as each step finishes.</p></div>');
+      if (sampleBox) left.push(sampleBox);
 
       // Right column
       var done = d.steps.filter(function (s) { return s.state === 'done'; }).length;

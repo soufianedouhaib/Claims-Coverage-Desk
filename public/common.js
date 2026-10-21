@@ -63,7 +63,7 @@
   var MONEY_KEY = /(amount|limit|excess|settlement|sum_insured|sums_insured|premium|cost|price|value|payable|claimed)/i;
   // Raw numbers in text from the assessment ("16450.0") read as 16,450.
   function tidyNumbers(s) {
-    return String(s).replace(/(^|[^\w.\-\/])(\d{4,})\.(\d{1,2})(?![\d.])/g, function (m, pre, int, dec) {
+    return String(s).replace(/(^|[^\w.\-\/])(\d{4,})\.(\d{1,2})(?!\d)(?!\.\d)/g, function (m, pre, int, dec) {
       if (int.length === 4 && /^(19|20)/.test(int) && dec.length === 2 && Number(dec) > 0) return m; // looks like a year/section, leave it
       var n = Number(int + '.' + dec), whole = Number(dec) === 0;
       return pre + n.toLocaleString('en-AU', { minimumFractionDigits: whole ? 0 : 2, maximumFractionDigits: whole ? 0 : 2 });
@@ -150,16 +150,19 @@
         var cols = [];
         v.forEach(function (row) { Object.keys(row).forEach(function (k) { if (cols.indexOf(k) < 0) cols.push(k); }); });
         cols = cols.slice(0, 8);
-        return '<div class="value-scroll"><table class="mini-table"><thead><tr>' + cols.map(function (c) { return '<th>' + esc(humanize(c)) + '</th>'; }).join('') +
+        // Wide tables (3+ columns) turn into stacked rows when their column is too narrow, so long
+        // wording (quoted clauses, rationale) always wraps inside the column instead of overflowing.
+        return '<div class="value-scroll"><table class="mini-table' + (cols.length >= 3 ? ' stackable' : '') + '"><thead><tr>' + cols.map(function (c) { return '<th>' + esc(humanize(c)) + '</th>'; }).join('') +
           '</tr></thead><tbody>' + v.map(function (row) {
-            return '<tr>' + cols.map(function (c) { return '<td>' + renderValue(row[c], c, depth + 1) + '</td>'; }).join('') + '</tr>';
+            return '<tr>' + cols.map(function (c) { return '<td data-label="' + esc(humanize(c)) + '">' + renderValue(row[c], c, depth + 1) + '</td>'; }).join('') + '</tr>';
           }).join('') + '</tbody></table></div>';
       }
       return '<ul class="plain">' + v.map(function (x) { return '<li>' + renderValue(x, key, depth + 1) + '</li>'; }).join('') + '</ul>';
     }
     var keys = Object.keys(v);
     if (!keys.length) return '<span class="muted">None</span>';
-    return '<dl class="kv">' + keys.map(function (k) { return '<dt>' + esc(humanize(k)) + '</dt><dd>' + renderValue(v[k], k, depth + 1) + '</dd>'; }).join('') + '</dl>';
+    // Amounts keyed by name inside a money field (sums insured: { Buildings: 650000 }) are money too.
+    return '<dl class="kv">' + keys.map(function (k) { return '<dt>' + esc(humanize(k)) + '</dt><dd>' + renderValue(v[k], (typeof v[k] === 'number' && MONEY_KEY.test(key || '')) ? key : k, depth + 1) + '</dd>'; }).join('') + '</dl>';
   }
   function kv(pairs) {
     return '<dl class="kv">' + pairs.filter(function (p) { return p; }).map(function (p) {

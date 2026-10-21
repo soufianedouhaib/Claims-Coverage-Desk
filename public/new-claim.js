@@ -156,7 +156,8 @@ AP.boot({
         '<div class="sample-top"><span class="sample-num">Sample</span><span class="small muted">' + E(s.claimReference) + '</span></div>' +
         '<h3>' + E(s.title) + '</h3><div class="small muted">' + E(s.place) + ' · ' + E(s.peril) + '</div>' +
         '<div class="sample-route">' + AP.routeChip(s.route, true) + '</div>' +
-        '<dl class="sample-facts"><dt>Expected</dt><dd>' + AP.decisionPill(s.expectedDecision) + '</dd><dt>Claimed</dt><dd>' + E(s.claimed) + '</dd><dt>Outcome</dt><dd>' + E(s.expectedSettlement) + '</dd></dl>' +
+        '<dl class="sample-facts"><dt>Built to show</dt><dd>' + AP.decisionPill(s.expectedDecision) + '</dd><dt>Claimed</dt><dd>' + E(s.claimed) + '</dd><dt>If confirmed</dt><dd>' + E(s.expectedSettlement) + '</dd></dl>' +
+        '<p class="small muted" style="margin:6px 0 0">The assessment decides for itself and can ask for more information first.</p>' +
         '<p class="small sample-why">' + E(s.why) + '</p>' +
         '<details class="sample-more"><summary>What the assessment should find</summary><ul class="plain small">' + s.checks.map(function (c) { return '<li>' + E(c) + '</li>'; }).join('') + '</ul>' +
         '<div class="small muted" style="margin:8px 0 4px">Documents (' + files.length + ')</div><ul class="plain small">' +

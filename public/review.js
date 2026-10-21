@@ -1,7 +1,7 @@
 AP.boot({
   title: 'Review', nav: 'reviews', perm: ['review_quick', 'review_detailed'],
   render: function (me, main) {
-    var E = AP.esc, R = AP.renderValue;
+    var E = function (x) { return AP.esc(x == null ? x : AP.tidyNumbers(x)); }, R = AP.renderValue; // assessment text: 16450.0 reads 16,450
     var id = AP.qs('id');
     main.innerHTML = '<div id="body"><div class="loading-page"><span class="spinner"></span></div></div>';
     var body = document.getElementById('body');
