@@ -80,30 +80,39 @@ function clean(s) { return String(s).replace(/\bopus\b/gi, 'assessment service')
 const json = express.json({ limit: '1mb' });
 const bigJson = express.json({ limit: '6mb' });
 
-// One-time tidy-up when the built-in accounts moved from "Demo ..." @demo.local to their plain
-// names @claims.local: update who submitted / reviewed on existing claims and reviews.
+// One-time tidy-up of existing claims and reviews after the built-in accounts changed (from
+// "Demo ..." @demo.local, then role names, to person names @claims.local): update who submitted
+// and who reviewed. Only exact default names and "Name (email)" pairs are changed.
 let recordsChecked = false;
 async function migrateRecords() {
   if (recordsChecked) return; recordsChecked = true;
   await auth.ensureDemoAccounts();
-  if (await store.getJSON('meta:recordsMoved')) return;
-  const fix = function (v) {
+  if (await store.getJSON('meta:recordsNamed')) return;
+  const M = auth.ACCOUNT_MOVES;
+  const fixField = function (v) {
     if (typeof v !== 'string') return v;
-    auth.ACCOUNT_MOVES.forEach(function (m) { v = v.split(m.fromName).join(m.toName).split(m.from).join(m.to); });
+    for (const m of M) { if (v === m.from) return m.to; if (m.fromNames.indexOf(v) >= 0) return m.toName; }
     return v;
+  };
+  const fixText = function (t) {
+    M.forEach(function (m) {
+      m.fromNames.forEach(function (n) { [m.from, m.to].forEach(function (e) { t = t.split(n + ' (' + e + ')').join(m.toName + ' (' + m.to + ')'); }); });
+      t = t.split(m.from).join(m.to);
+    });
+    return t;
   };
   for (const c of await allClaims()) {
     const before = JSON.stringify([c.createdBy, c.createdByName]);
-    c.createdBy = fix(c.createdBy); c.createdByName = fix(c.createdByName);
+    c.createdBy = fixField(c.createdBy); c.createdByName = fixField(c.createdByName);
     if (JSON.stringify([c.createdBy, c.createdByName]) !== before) await saveClaim(c);
   }
   for (const r of await allReviews()) {
     const before = JSON.stringify([r.completedBy, r.completedByName, r.submitted]);
-    r.completedBy = fix(r.completedBy); r.completedByName = fix(r.completedByName);
-    if (r.submitted) r.submitted = JSON.parse(fix(JSON.stringify(r.submitted)));
+    r.completedBy = fixField(r.completedBy); r.completedByName = fixField(r.completedByName);
+    if (r.submitted) r.submitted = JSON.parse(fixText(JSON.stringify(r.submitted)));
     if (JSON.stringify([r.completedBy, r.completedByName, r.submitted]) !== before) await saveReview(r);
   }
-  await store.setJSON('meta:recordsMoved', new Date().toISOString());
+  await store.setJSON('meta:recordsNamed', new Date().toISOString());
 }
 app.use('/api', function (req, res, next) { migrateRecords().catch(function () { recordsChecked = false; }).then(function () { next(); }); });
 
