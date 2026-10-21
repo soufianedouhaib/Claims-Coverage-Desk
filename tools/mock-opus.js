@@ -188,8 +188,12 @@ function createMock(opts) {
       policy_validity_status: 'Valid', policy_validity_reasons: ['Loss date within the period of insurance', 'Premium paid', 'Insured and address match the schedule'],
       policy_validity_audit: [{ check: 'Period', result: 'Pass' }] };
     const tri = { coverage_type: 'Buildings and contents', peril_category: complex ? 'Storm' : 'Escape of liquid', urgency_level: complex ? 'High' : 'Standard',
-      complexity_level: complex ? 'Complex' : 'Simple', is_high_value_claim: complex, triage_reasons: complex ? ['Open roof', 'Vulnerable occupant', 'Antique item over sub-limit'] : ['Single peril, low value'], triage_audit: [] };
-    const interp = { insuring_clause_references: [{ clause: complex ? '3.2 Storm' : '3.5 Escape of liquid', citation: 'Policy wording p.14', relevance: 'Primary insuring clause' }],
+      complexity_level: complex ? 'Complex' : 'Simple', is_high_value_claim: complex, triage_reasons: complex ? ['Open roof', 'Vulnerable occupant', 'Antique item over sub-limit', 'Estimated amount claimed is 16450.00.'] : ['Single peril, low value', 'Estimated claimed amount is 9180.0 and is not treated as high value.'], triage_audit: [] };
+    const LONGQ = 'Loss or damage caused by flood is covered only if Flood (C9) is shown as selected on your Policy Schedule and only applies to the residential building and contents at the insured address.';
+    const LONGR = 'The reported cause, water spraying from under a kitchen sink after a braided flexi hose split, aligns with the policy definition of escape of liquid, which includes liquid that suddenly escapes from a hose, tap, basin or sink.';
+    const interp = { insuring_clause_references: [
+        { clause: complex ? '3.2 Storm' : '3.5 Escape of liquid', citation: 'Policy wording p.14', quoted_text: LONGQ, relevance: 'Primary insuring clause', rationale: LONGR },
+        { clause: 'C9 Flood', citation: 'Policy wording p.16, section C9', quoted_text: LONGQ, relevance: 'Considered and set aside', rationale: LONGR }],
       definition_references: [{ term: complex ? 'Storm' : 'Escape of liquid', citation: 'Definitions p.4' }],
       exclusion_references: complex ? [{ clause: '5.9 Mould', citation: 'p.22', applicability: 'Partially applies: gradual mould excluded beyond sub-limit' }] : [],
       general_condition_references: [], endorsement_assessment: complex ? [{ endorsement: 'E4', effect: 'Gutter damage not covered' }] : [],
@@ -197,7 +201,7 @@ function createMock(opts) {
       clause_interpretation_confidence: complex ? 0.68 : 0.93, clause_interpretation_audit: [] };
     const cov = { coverage_decision: complex ? 'Partially covered' : 'Covered',
       coverage_decision_reasons: complex ? ['Storm damage covered under 3.2', 'Antique cabinet capped at sub-limit', 'Mould partially excluded (5.9)'] : ['Escape of liquid covered under 3.5', 'No exclusions apply'],
-      applicable_limits: [{ cover: 'Buildings', limit: 650000 }], applicable_sub_limits: complex ? [{ item: 'Antiques', limit: 5000 }, { item: 'Mould', limit: 2500 }] : [],
+      applicable_limits: [{ cover: 'Buildings', limit: 650000, rationale: 'The supplied sums insured list Buildings with a sum insured of AUD 650,000. The reported built-in cabinetry and timber floorboards most closely align with the Buildings definition.' }], applicable_sub_limits: complex ? [{ item: 'Antiques', limit: 5000 }, { item: 'Mould', limit: 2500 }] : [],
       applicable_excess: { amount: 500, reason: 'Standard excess per event' }, coverage_confidence_score: complex ? 0.64 : 0.94,
       outstanding_information: complex ? ['Roofer report confirming storm cause', 'Valuation for antique cabinet'] : [],
       requires_handler_review: true, is_low_confidence: complex, is_not_covered: false, is_partially_covered: complex, is_high_value_claim: complex, requires_detailed_review: complex,
