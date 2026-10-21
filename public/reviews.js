@@ -64,5 +64,6 @@ AP.boot({
     }
     load();
     setInterval(function () { if (!document.hidden) load(); }, 10000);
+    document.addEventListener('ccd:new-reviews', function () { load(); });
   }
 });

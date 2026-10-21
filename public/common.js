@@ -287,7 +287,109 @@
     document.getElementById('navToggle').onclick = function () { setDrawer(!document.body.classList.contains('nav-open')); };
     document.getElementById('sideScrim').onclick = function () { setDrawer(false); };
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') setDrawer(false); });
-    if (can(me, 'review_quick') || can(me, 'review_detailed')) refreshBadge();
+    if (can(me, 'review_quick') || can(me, 'review_detailed')) watchReviews(me);
+  }
+
+
+  // ---------- new-review alerts ----------
+  // While a reviewer has any page open, check for reviews routed to them every 10 seconds. A review
+  // that was not there before brings up a popup, a short chime and a flashing tab title; no refresh
+  // needed. Reviews already seen (on any page, in this browser) are remembered so each alerts once.
+  var watchTimer = null, audioCtx = null, titleTimer = null, baseTitle = '';
+  function seenKey(me) { return 'ccd-seen-reviews:' + me.email; }
+  function loadSeen(me) { try { var v = JSON.parse(localStorage.getItem(seenKey(me)) || 'null'); return Array.isArray(v) ? v : null; } catch (e) { return null; } }
+  function saveSeen(me, ids) { try { localStorage.setItem(seenKey(me), JSON.stringify(ids.slice(-300))); } catch (e) {} }
+  function soundOn() { try { return localStorage.getItem('ccd-review-sound') !== 'off'; } catch (e) { return true; } }
+  function setSound(on) { try { localStorage.setItem('ccd-review-sound', on ? 'on' : 'off'); } catch (e) {} }
+
+  // Browsers only allow sound after the person has interacted with the page, so the audio is
+  // unlocked on the first click or key press.
+  function unlockAudio() {
+    try {
+      if (!audioCtx) { var AC = window.AudioContext || window.webkitAudioContext; if (AC) audioCtx = new AC(); }
+      if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+    } catch (e) {}
+  }
+  ['pointerdown', 'keydown'].forEach(function (ev) { document.addEventListener(ev, unlockAudio, { capture: true }); });
+  function chime() {
+    if (!soundOn()) return 'off';
+    unlockAudio();
+    if (!audioCtx || audioCtx.state !== 'running') return 'blocked';
+    var t = audioCtx.currentTime;
+    [[880, 0], [1318.5, 0.16]].forEach(function (n) {
+      var o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.type = 'sine'; o.frequency.value = n[0];
+      g.gain.setValueAtTime(0.0001, t + n[1]);
+      g.gain.exponentialRampToValueAtTime(0.22, t + n[1] + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + n[1] + 0.45);
+      o.connect(g); g.connect(audioCtx.destination); o.start(t + n[1]); o.stop(t + n[1] + 0.5);
+    });
+    return 'played';
+  }
+  function flashTitle(n) {
+    if (!baseTitle) baseTitle = document.title;
+    clearInterval(titleTimer);
+    var on = false, msg = '(' + n + ') New review waiting';
+    titleTimer = setInterval(function () { on = !on; document.title = on ? msg : baseTitle; }, 1200);
+    document.title = msg;
+  }
+  function stopFlash() { clearInterval(titleTimer); titleTimer = null; if (baseTitle) document.title = baseTitle; }
+  document.addEventListener('visibilitychange', function () { if (!document.hidden && !document.querySelector('.review-alert')) stopFlash(); });
+
+  function showReviewAlert(me, fresh) {
+    var old = document.querySelector('.review-alert'); if (old) old.remove();
+    var first = fresh[0], kind = first.kind, verb = kind === 'quick' ? 'Confirm now' : 'Review now';
+    var what = fresh.length === 1 ? (kind === 'quick' ? 'New quick sign-off' : 'New detailed review') : fresh.length + ' new reviews';
+    var el = document.createElement('div');
+    el.className = 'review-alert'; el.setAttribute('role', 'alertdialog'); el.setAttribute('aria-live', 'assertive'); el.setAttribute('aria-label', what + ' waiting for you');
+    el.innerHTML =
+      '<div class="ra-head"><span class="ra-dot" aria-hidden="true"></span><strong>' + esc(what) + ' waiting for you</strong>' +
+        '<button type="button" class="ra-x" aria-label="Close">×</button></div>' +
+      '<div class="ra-body"><div class="ra-ref">' + esc(first.claimReference || 'Claim reference not read yet') + '</div>' +
+        '<div class="small muted">' + esc([first.insuredName, first.claimTitle].filter(Boolean).join(' · ') || 'Received just now') + '</div>' +
+        (first.proposedDecision ? '<div style="margin-top:6px">Proposed: ' + decisionPill(first.proposedDecision) + (first.confidence != null ? ' <span class="small muted">' + fmtPct(first.confidence) + ' confidence</span>' : '') + '</div>' : '') +
+        (fresh.length > 1 ? '<div class="small muted" style="margin-top:6px">and ' + (fresh.length - 1) + ' more in your queue</div>' : '') +
+        '<div class="small ra-sound" hidden></div></div>' +
+      '<div class="ra-foot"><a class="btn primary small" href="/review.html?id=' + encodeURIComponent(first.id) + '">' + verb + '</a>' +
+        '<a class="btn small" href="/reviews.html">Open queue</a><button type="button" class="btn small" data-later>Later</button>' +
+        '<button type="button" class="linkbtn small ra-mute">' + (soundOn() ? 'Mute sound' : 'Turn sound on') + '</button>' +
+        (window.Notification && Notification.permission === 'default' ? '<button type="button" class="linkbtn small ra-desk">Desktop alerts</button>' : '') + '</div>';
+    document.body.appendChild(el);
+    function close() { el.classList.add('leaving'); setTimeout(function () { el.remove(); }, 200); stopFlash(); }
+    el.querySelector('.ra-x').onclick = close;
+    el.querySelector('[data-later]').onclick = close;
+    el.querySelector('.ra-mute').onclick = function () { setSound(!soundOn()); this.textContent = soundOn() ? 'Mute sound' : 'Turn sound on'; if (soundOn()) chime(); };
+    var desk = el.querySelector('.ra-desk');
+    if (desk) desk.onclick = function () { Notification.requestPermission().then(function () { desk.remove(); }); };
+    var s = chime(), note = el.querySelector('.ra-sound');
+    if (s === 'blocked') { note.textContent = 'Sound plays after you click anywhere on the page once.'; note.hidden = false; }
+    flashTitle(fresh.length);
+    if (document.hidden && window.Notification && Notification.permission === 'granted') {
+      try { var n = new Notification(what + ' waiting', { body: (first.claimReference || '') + (first.insuredName ? ' · ' + first.insuredName : ''), tag: 'ccd-review' }); n.onclick = function () { window.focus(); location.href = '/review.html?id=' + encodeURIComponent(first.id); }; } catch (e) {}
+    }
+  }
+
+  function checkReviews(me) {
+    return api('GET', '/api/reviews').then(function (j) {
+      var pending = j.reviews.filter(function (r) { return r.status === 'pending'; });
+      var b = document.getElementById('reviewBadge');
+      if (b) { var n = pending.length; b.textContent = n; b.hidden = false; b.classList.toggle('zero', !n); b.title = n + (n === 1 ? ' review' : ' reviews') + ' waiting'; }
+      var seen = loadSeen(me);
+      var ids = j.reviews.map(function (r) { return r.id; });
+      if (seen === null) { saveSeen(me, ids); return; } // first time in this browser: nothing counts as new
+      var fresh = pending.filter(function (r) { return seen.indexOf(r.id) < 0; })
+        .sort(function (a, b) { return String(a.receivedAt).localeCompare(String(b.receivedAt)); });
+      saveSeen(me, seen.concat(ids.filter(function (id) { return seen.indexOf(id) < 0; })));
+      if (fresh.length) {
+        showReviewAlert(me, fresh);
+        document.dispatchEvent(new CustomEvent('ccd:new-reviews', { detail: fresh }));
+      }
+    }).catch(function () {});
+  }
+  function watchReviews(me) {
+    checkReviews(me);
+    clearInterval(watchTimer);
+    watchTimer = setInterval(function () { checkReviews(me); }, 10000);
   }
 
   function refreshBadge() {
@@ -554,6 +656,6 @@
     fmtDate: fmtDate, fmtRel: fmtRel, fmtNum: fmtNum, fmtMoney: fmtMoney, tidyNumbers: tidyNumbers, fmtPct: fmtPct, humanize: humanize,
     casePill: casePill, statusLabel: statusLabel, decisionPill: decisionPill, decisionText: decisionText, decisionClass: decisionClass,
     reviewStatusPill: reviewStatusPill, renderValue: renderValue, kv: kv, toast: toast, modal: modal, refreshBadge: refreshBadge, LOGO: LOGO,
-    openSupport: openSupport, setSupportContext: setSupportContext, cycleTheme: cycleTheme, ICONS: ICONS, animateIn: animateIn, rowAction: rowAction, actionCell: actionCell, repeatNote: repeatNote, outcomeLabel: outcomeLabel, isOverride: isOverride
+    openSupport: openSupport, setSupportContext: setSupportContext, cycleTheme: cycleTheme, ICONS: ICONS, animateIn: animateIn, checkReviews: checkReviews, rowAction: rowAction, actionCell: actionCell, repeatNote: repeatNote, outcomeLabel: outcomeLabel, isOverride: isOverride
   };
 })();
