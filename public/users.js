@@ -29,7 +29,7 @@ AP.boot({
             return '<tr><td data-label="Name"><div class="primary-cell">' + E(u.name) + (u.email === me.email ? ' <span class="small muted">(you)</span>' : '') + '</div><div class="sub wrap-any">' + E(u.email) + '</div></td>' +
               '<td data-label="Role">' + E(u.roleLabel) + '</td>' +
               '<td data-label="Status">' + (u.active ? '<span class="pill ok">Active</span>' : '<span class="pill">Deactivated</span>') + '</td>' +
-              '<td data-label="Sign-in page">' + (u.quickSignIn ? '<span class="pill plain info">One-click</span>' : '<span class="muted small">Password only</span>') + '</td>' +
+              '<td data-label="Sign-in page">' + (MODE_PILL[u.signIn || (u.quickSignIn ? 'oneclick' : 'hidden')] || '') + '</td>' +
               '<td data-label="Last sign-in" class="nowrap">' + (u.lastLoginAt ? AP.fmtRel(u.lastLoginAt) : '<span class="muted">Never</span>') + '</td>' +
               '<td class="right nowrap"><button class="btn small" type="button" data-edit="' + E(u.email) + '">Edit</button>' +
               (u.email === me.email ? '' : ' <button class="btn small danger" type="button" data-del="' + E(u.email) + '">Delete</button>') + '</td></tr>';
@@ -43,29 +43,57 @@ AP.boot({
       }).catch(function (e) { document.getElementById('list').innerHTML = '<div class="card-body"><div class="alert bad">' + E(e.message) + '</div></div>'; });
     }
 
+    // Three ways to appear on the sign-in page.
+    var MODES = [
+      ['oneclick', 'Listed – one click, no password', 'Their name is on the sign-in page and one click signs them in.'],
+      ['password', 'Listed – must type their password', 'Their name is on the sign-in page; clicking it asks for their password.'],
+      ['hidden', 'Not listed', 'They type their email and password to sign in.']
+    ];
+    var MODE_PILL = { oneclick: '<span class="pill plain info">One click</span>', password: '<span class="pill plain violet">Listed · password</span>', hidden: '<span class="muted small">Not listed</span>' };
+    function modePicker(current) {
+      return '<fieldset class="field" style="border:0;padding:0;margin:0"><legend style="font-weight:550;font-size:13px;margin-bottom:4px">Sign-in page</legend>' +
+        MODES.map(function (m) {
+          return '<label style="display:flex;gap:8px;align-items:flex-start;padding:5px 0;cursor:pointer"><input type="radio" name="u-mode" value="' + m[0] + '"' + (m[0] === current ? ' checked' : '') + ' style="margin-top:3px">' +
+            '<span><span style="font-weight:550">' + m[1] + '</span><span class="hint" style="display:block">' + m[2] + '</span></span></label>';
+        }).join('') + '</fieldset>';
+    }
+    function pickedMode(back) { var x = back.querySelector('input[name=u-mode]:checked'); return x ? x.value : 'oneclick'; }
+    function syncPwHint(back, needOwn) {
+      var m = pickedMode(back), h = back.querySelector('#pw-hint'), lab = back.querySelector('#pw-label');
+      var need = m !== 'oneclick' && needOwn;
+      lab.classList.toggle('req', need);
+      h.textContent = m === 'oneclick' ? 'Optional. At least 10 characters; they can also sign in with it by typing their email.' :
+        need ? 'Required: they sign in by typing this password. At least 10 characters.' : 'Leave empty to keep their current password. Changing it signs them out.';
+    }
+
     function add() {
-      AP.modal('Add user', '<div class="form-grid"><label class="field">Name<input type="text" id="u-name"></label><label class="field">Email<input type="email" id="u-email"></label>' +
+      var m = AP.modal('Add user', '<div class="form-grid"><label class="field">Name<input type="text" id="u-name"></label><label class="field">Email<input type="email" id="u-email"></label>' +
         '<label class="field">Role' + roleSelect('intake') + '</label>' +
-        '<label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="u-quick" checked> Show on the sign-in page (one-click sign-in)</label>' +
-        '<label class="field">Password<span class="hint">Optional with one-click sign-in. At least 10 characters; they can change it under Account.</span><input type="text" id="u-pw" autocomplete="off"></label>' +
+        modePicker('oneclick') +
+        '<label class="field"><span id="pw-label">Password</span><span class="hint" id="pw-hint"></span><input type="text" id="u-pw" autocomplete="off"></label>' +
         '<div class="alert bad" id="u-err" hidden></div></div>', [
         { label: 'Cancel' },
         { label: 'Add user', primary: true, onClick: function (back, close) {
           var err = back.querySelector('#u-err');
-          AP.api('POST', '/api/users', { name: back.querySelector('#u-name').value, email: back.querySelector('#u-email').value, role: back.querySelector('#u-role').value, password: back.querySelector('#u-pw').value, quickSignIn: back.querySelector('#u-quick').checked })
+          AP.api('POST', '/api/users', { name: back.querySelector('#u-name').value, email: back.querySelector('#u-email').value, role: back.querySelector('#u-role').value, password: back.querySelector('#u-pw').value, signIn: pickedMode(back) })
             .then(function () { close(); AP.toast('User added'); load(); })
             .catch(function (e) { err.textContent = e.message; err.hidden = false; });
           return false;
         } }
       ]);
+      wireMode(m.el, true);
+    }
+    function wireMode(back, needOwn) {
+      back.querySelectorAll('input[name=u-mode]').forEach(function (r) { r.onchange = function () { syncPwHint(back, needOwn); }; });
+      syncPwHint(back, needOwn);
     }
 
     function edit(u) {
       var self = u.email === me.email;
-      AP.modal('Edit ' + u.name, '<div class="form-grid"><div class="small muted wrap-any">' + E(u.email) + '</div><label class="field">Name<input type="text" id="u-name" value="' + E(u.name) + '"></label>' +
+      var m = AP.modal('Edit ' + u.name, '<div class="form-grid"><div class="small muted wrap-any">' + E(u.email) + '</div><label class="field">Name<input type="text" id="u-name" value="' + E(u.name) + '"></label>' +
         '<label class="field">Role' + roleSelect(u.role) + (self ? '<span class="hint">You cannot remove your own administrator role.</span>' : '') + '</label>' +
-        '<label class="field">New password<span class="hint">Leave empty to keep the current one. Changing it signs them out.</span><input type="text" id="u-pw" autocomplete="off"></label>' +
-        '<label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="u-quick"' + (u.quickSignIn ? ' checked' : '') + '> Show on the sign-in page (one-click sign-in)</label>' +
+        modePicker(u.signIn || (u.quickSignIn ? 'oneclick' : 'hidden')) +
+        '<label class="field"><span id="pw-label">New password</span><span class="hint" id="pw-hint"></span><input type="text" id="u-pw" autocomplete="off"></label>' +
         (self ? '<div class="small muted">You cannot delete or deactivate your own account.</div>' : '<label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="u-active"' + (u.active ? ' checked' : '') + '> Active (can sign in)</label>') +
         '<div class="alert bad" id="u-err" hidden></div></div>', [
         { label: 'Cancel' },
@@ -73,13 +101,14 @@ AP.boot({
           var b = { name: back.querySelector('#u-name').value, role: back.querySelector('#u-role').value };
           var pw = back.querySelector('#u-pw').value; if (pw) b.password = pw;
           var act = back.querySelector('#u-active'); if (act) b.active = act.checked;
-          b.quickSignIn = back.querySelector('#u-quick').checked;
+          b.signIn = pickedMode(back);
           AP.api('PATCH', '/api/users/' + encodeURIComponent(u.email), b)
             .then(function () { close(); AP.toast('Saved'); load(); })
             .catch(function (e) { var err = back.querySelector('#u-err'); err.textContent = e.message; err.hidden = false; });
           return false;
         } }
       ]);
+      wireMode(m.el, !u.hasPassword);
     }
     function del(u) {
       AP.modal('Delete ' + u.name + '?', '<p>This permanently removes <strong class="wrap-any">' + E(u.email) + '</strong>. They are signed out and can no longer sign in.' +
