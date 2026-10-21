@@ -608,7 +608,7 @@ const ROLE_BLURB = {
 app.get('/api/auth/demo-accounts', wrap(async function (req, res) {
   const list = await auth.listDemoAccounts();
   res.json({ enabled: auth.demoEnabled(), accounts: list.map(function (u) {
-    return { email: u.email, name: u.name, role: u.role, roleLabel: (auth.ROLES[u.role] || {}).label || u.role, blurb: ROLE_BLURB[u.role] || '' };
+    return { email: u.email, name: u.name, role: u.role, roleLabel: (auth.ROLES[u.role] || {}).label || u.role, blurb: ROLE_BLURB[u.role] || '', needsPassword: auth.signInMode(u) === 'password' };
   }) });
 }));
 
@@ -680,7 +680,7 @@ app.post('/api/account/password', json, auth.requireAuth(), wrap(async function 
   const cur = String(req.body.current || ''), nxt = String(req.body.next || '');
   if (!auth.checkPassword(cur, u.passHash)) return res.status(400).json({ error: 'Your current password is not correct.' });
   if (nxt.length < 10) return res.status(400).json({ error: 'Use at least 10 characters for the new password.' });
-  u.passHash = auth.hashPassword(nxt);
+  u.passHash = auth.hashPassword(nxt); u.hasPassword = true;
   u.sessionVersion = (u.sessionVersion || 1) + 1;
   await auth.saveUser(u);
   auth.setSession(res, u, originOf(req).startsWith('https'));
@@ -701,10 +701,12 @@ app.post('/api/users', json, auth.requireAuth('users'), wrap(async function (req
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(400).json({ error: 'Enter a valid email address.' });
   if (!auth.ROLES[b.role]) return res.status(400).json({ error: 'Choose a role.' });
   if (!b.name || !String(b.name).trim()) return res.status(400).json({ error: 'Enter a name.' });
-  if (b.password && String(b.password).length < 10) return res.status(400).json({ error: 'Use at least 10 characters for the password, or leave it empty for one-click sign-in only.' });
-  if (!b.password && b.quickSignIn === false) return res.status(400).json({ error: 'Set a password, or allow one-click sign-in, so this person can sign in.' });
+  const mode = auth.SIGNIN_MODES.indexOf(b.signIn) >= 0 ? b.signIn : (b.quickSignIn === false ? 'hidden' : 'oneclick');
+  if (b.password && String(b.password).length < 10) return res.status(400).json({ error: 'Use at least 10 characters for the password.' });
+  if (!b.password && mode !== 'oneclick') return res.status(400).json({ error: 'Set a password: this person signs in by typing it.' });
   if (await auth.getUser(email)) return res.status(409).json({ error: 'A user with that email already exists.' });
-  const u = await auth.saveUser({ email: email, name: String(b.name).trim(), role: b.role, active: true, quickSignIn: b.quickSignIn !== false,
+  const u = await auth.saveUser({ email: email, name: String(b.name).trim(), role: b.role, active: true, signIn: mode, quickSignIn: mode === 'oneclick',
+    hasPassword: !!b.password,
     passHash: auth.hashPassword(b.password || crypto.randomBytes(24).toString('hex')), createdAt: nowIso(), sessionVersion: 1 });
   res.json({ user: auth.publicUser(u) });
 }));
@@ -721,14 +723,18 @@ app.patch('/api/users/:email', json, auth.requireAuth('users'), wrap(async funct
     u.role = b.role; u.sessionVersion = (u.sessionVersion || 1) + 1;
   }
   if (b.name !== undefined && String(b.name).trim()) u.name = String(b.name).trim();
-  if (b.quickSignIn !== undefined) u.quickSignIn = !!b.quickSignIn;
+  let mode = auth.SIGNIN_MODES.indexOf(b.signIn) >= 0 ? b.signIn : (b.quickSignIn !== undefined ? (b.quickSignIn ? 'oneclick' : 'hidden') : null);
+  if (mode) {
+    if (mode !== 'oneclick' && !b.password && !auth.hasOwnPassword(u)) return res.status(400).json({ error: 'Set a password for ' + u.name + ' first: with this option they sign in by typing it.' });
+    u.signIn = mode; u.quickSignIn = mode === 'oneclick';
+  }
   if (b.active !== undefined) {
     if (self && !b.active) return res.status(400).json({ error: 'You cannot deactivate your own account.' });
     u.active = !!b.active; u.sessionVersion = (u.sessionVersion || 1) + 1;
   }
   if (b.password) {
     if (String(b.password).length < 10) return res.status(400).json({ error: 'Use at least 10 characters for the password.' });
-    u.passHash = auth.hashPassword(b.password); u.sessionVersion = (u.sessionVersion || 1) + 1;
+    u.passHash = auth.hashPassword(b.password); u.hasPassword = true; u.sessionVersion = (u.sessionVersion || 1) + 1;
   }
   await auth.saveUser(u);
   res.json({ user: auth.publicUser(u) });
